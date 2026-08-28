@@ -17,6 +17,15 @@ total unitary to machine precision and terminates at the fixed point
 
 from __future__ import annotations
 
+from .invariants import (
+    CancellationClosure,
+    ConjugationMatrixTruth,
+    MergeClosure,
+    SymplecticForm,
+    UnitaryEquivalence,
+    VerificationContext,
+    VerificationError,
+)
 from .objects import Pauli, Rotation
 
 __all__ = ["Operator", "op", "get_op", "registry", "dispatch"]
@@ -65,7 +74,16 @@ class Operator:
             raise NotImplementedError(
                 f"{self.name}: no implementation for argument types {key}"
             )
-        return impl(*args, **kwargs)
+        result = impl(*args, **kwargs)
+        # Layer 2: automatic verification (strict by default)
+        if VerificationContext.is_enabled() and self.invariants:
+            for inv in self.invariants:
+                report = inv.check(result, *args, **kwargs)
+                if not report.ok:
+                    raise VerificationError(
+                        f"{self.name}: invariant '{inv.name}' failed: {report.details}"
+                    )
+        return result
 
     def __repr__(self):
         n = len(self._implementations)
@@ -113,6 +131,7 @@ def dispatch(*types, name: str | None = None):
 
 pauli_commutes = op(
     "pauli.commutes",
+    invariants=[SymplecticForm()],
     theorem="Commutation is decided by the symplectic form omega(a,b) = 0.",
 )
 
@@ -124,6 +143,7 @@ def _(a: Pauli, b: Pauli) -> bool:
 
 pauli_conjugate = op(
     "pauli.conjugate_by",
+    invariants=[ConjugationMatrixTruth()],
     theorem=(
         "Conjugation by a Clifford is a symplectic transformation; the "
         "tableau r-bit tracks the +/- phase exactly (verified vs matrix truth)."
@@ -139,6 +159,7 @@ def _(a: Pauli, gates) -> tuple[Pauli, int]:
 
 rotation_merge = op(
     "rotation.merge",
+    invariants=[MergeClosure()],
     theorem=(
         "Closure of phase addition on the orbit of a Pauli axis: "
         "R_P(t) R_P(s) = R_P(t+s) for same-axis rotations."
@@ -153,6 +174,7 @@ def _(a: Rotation, b: Rotation):
 
 rotation_cancel = op(
     "rotation.cancels",
+    invariants=[CancellationClosure()],
     theorem="2-pi closure: R_P(theta) = 1 iff theta ≡ 0 (mod 2 pi).",
 )
 
@@ -164,6 +186,7 @@ def _(a: Rotation) -> bool:
 
 circuit_optimize = op(
     "circuit.optimize",
+    invariants=[UnitaryEquivalence()],
     theorem=(
         "Fixed-point completeness (closure): iterate merge/cancel with "
         "Clifford pull-through (dagger conjugation) until no merge is "
