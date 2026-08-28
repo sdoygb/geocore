@@ -22,6 +22,7 @@ import numpy as np
 from .invariants import (
     CancellationClosure,
     ConjugationMatrixTruth,
+    GeodesicEnergyConservation,
     MergeClosure,
     RotationActionClosure,
     SymplecticForm,
@@ -29,6 +30,7 @@ from .invariants import (
     VerificationContext,
     VerificationError,
 )
+from .manifolds import PolarPlane
 from .objects import Pauli, Rotation
 
 __all__ = ["Operator", "op", "get_op", "registry", "dispatch"]
@@ -226,3 +228,22 @@ def _(rotation, state):
     P = _pauli_matrix(rotation.axis)
     U = expm(-1j * rotation.theta / 2 * P)
     return U @ state
+
+
+geodesic_polar_point = op(
+    "geodesic.polar_point",
+    invariants=[GeodesicEnergyConservation()],
+    theorem=(
+        "The geodesic of ds^2 = dr^2 + r^2 dy^2 satisfies the second-order "
+        "ODE from Gamma^r_yy = -r, Gamma^y_ry = 1/r; the metric norm of the "
+        "velocity is conserved (a Levi-Civita invariant).  The registered "
+        "implementation is the generic RK4 integration; the closed form "
+        "(straight line in Cartesian coordinates) is a Layer-3 shortcut."
+    ),
+)
+
+
+@geodesic_polar_point.register(PolarPlane, np.ndarray, np.ndarray, float)
+@geodesic_polar_point.register(PolarPlane, np.ndarray, np.ndarray, np.float64)
+def _(manifold, initial, velocity, t):
+    return manifold.geodesic_generic(initial, velocity, float(t))

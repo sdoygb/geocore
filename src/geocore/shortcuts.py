@@ -25,7 +25,7 @@ import numpy as np
 
 from .invariants import VerificationReport
 
-__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form"]
+__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form"]
 
 
 @dataclasses.dataclass
@@ -97,13 +97,25 @@ class Shortcut:
         return self.replaces(*args)
 
     def verify_against(self, *args, atol=1e-9) -> VerificationReport:
-        """Machine-precision check: shortcut result == generic result."""
+        """Machine-precision check: shortcut result == generic result.
+
+        Handles plain arrays and objects exposing ``point``/``velocity``
+        (e.g. geodesic solutions).
+        """
         generic_result = self.generic(*args)
         shortcut_result = self.impl(*args)
+        if hasattr(generic_result, "point") and hasattr(shortcut_result, "point"):
+            err = max(
+                float(np.abs(np.asarray(generic_result.point) - np.asarray(shortcut_result.point)).max()),
+                float(np.abs(np.asarray(generic_result.velocity) - np.asarray(shortcut_result.velocity)).max()),
+            )
+            return VerificationReport(
+                ok=err < atol, max_error=err, details=f"point/velocity max error {err:.2e}"
+            )
         a = np.asarray(generic_result)
         b = np.asarray(shortcut_result)
-        if a.shape != b.shape:
-            return VerificationReport(False, 1.0, "shape mismatch")
+        if a.dtype.kind == "O" or b.dtype.kind == "O" or a.shape != b.shape:
+            return VerificationReport(False, 1.0, f"incomparable results: {a!r} vs {b!r}")
         err = float(np.abs(a - b).max())
         return VerificationReport(
             ok=err < atol, max_error=err, details=f"max error {err:.2e}"
@@ -187,5 +199,32 @@ rotation_closed_form = registry.register(
         impl=lambda rotation, state: rotation_action_closed_form(rotation.axis, rotation.theta, state),
         flops_generic=lambda n: (2**n) ** 3,          # expm: O(d^3), d = 2^n
         flops_shortcut=lambda n: 2**n,                # Pauli action: O(d)
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Second shortcut: closed-form geodesics on the polar plane (vs RK4 ODE).
+# ---------------------------------------------------------------------------
+
+from .manifolds import PolarPlane  # noqa: E402
+from .ops import geodesic_polar_point  # noqa: E402
+
+
+def _geodesic_polar_closed_form(manifold, initial, velocity, t):
+    return manifold.geodesic_closed_form(initial, velocity, float(t))
+
+
+def _geodesic_size(*args):
+    return 2  # 2-dimensional manifold
+
+
+geodesic_polar_closed_form = registry.register(
+    Shortcut(
+        name="geodesic.polar_closed_form",
+        replaces=geodesic_polar_point,
+        impl=_geodesic_polar_closed_form,
+        flops_generic=lambda n: 200 * 6,   # RK4: n_steps x ~6 ODE evals
+        flops_shortcut=lambda n: 20,        # closed form: a handful of trig ops
     )
 )

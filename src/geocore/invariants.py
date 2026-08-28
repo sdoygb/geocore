@@ -25,6 +25,7 @@ __all__ = [
     "Invariant",
     "SymplecticForm",
     "ConjugationMatrixTruth",
+    "GeodesicEnergyConservation",
     "RotationActionClosure",
     "MergeClosure",
     "CancellationClosure",
@@ -154,6 +155,28 @@ class RotationActionClosure(Invariant):
             ok=err < self.atol,
             max_error=err,
             details=f"rotation action closure max error {err:.2e}",
+        )
+
+
+class GeodesicEnergyConservation(Invariant):
+    """geodesic.polar_point: the metric norm g(v, v) of the velocity is
+    conserved along a geodesic (a geometric invariant of the Levi-Civita
+    connection)."""
+
+    name = "geodesic_energy_conservation"
+
+    def check(self, result, manifold, initial, velocity, t, **kwargs) -> VerificationReport:
+        r0, y0 = float(initial[0]), float(initial[1])
+        v_r, v_y = float(velocity[0]), float(velocity[1])
+        e0 = manifold.metric_norm_sq(r0, v_r, v_y)
+        r_t, y_t = result.point
+        v_rt, v_yt = result.velocity
+        e_t = manifold.metric_norm_sq(r_t, v_rt, v_yt)
+        err = abs(e_t - e0)
+        return VerificationReport(
+            ok=err < max(self.atol, 1e-9),
+            max_error=err,
+            details=f"energy drift {err:.2e} (initial {e0:.6f})",
         )
 
 

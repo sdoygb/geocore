@@ -48,3 +48,47 @@ def test_rotation_apply_operator_with_invariant():
     s = _state(2)
     result = get_op("rotation.apply_to_state")(r, s)
     assert result.shape == s.shape
+
+
+def test_geodesic_shortcut_matches_generic():
+    """Closed-form geodesic == RK4 integration to machine precision."""
+    from geocore import PolarPlane, get_op
+    from geocore.shortcuts import registry
+
+    m = PolarPlane()
+    rng = np.random.default_rng(3)
+    for _ in range(10):
+        init = np.array([rng.uniform(1.2, 3.0), rng.uniform(-1.0, 1.0)])
+        vel = np.array([rng.uniform(-0.3, 0.3), rng.uniform(-0.2, 0.2)])
+        t = float(rng.uniform(0.1, 0.9))
+        generic = get_op("geodesic.polar_point")(m, init, vel, t)
+        fast, report = registry.apply("geodesic.polar_closed_form", m, init, vel, t, verify=True)
+        assert report.ok, report.details
+        assert report.max_error < 1e-9
+        assert np.allclose(generic.point, fast.point, atol=1e-9)
+
+
+def test_geodesic_energy_conservation_invariant():
+    """The generic ODE path self-checks energy conservation (Layer 2)."""
+    from geocore import PolarPlane, get_op
+
+    m = PolarPlane()
+    init = np.array([2.0, 0.8])
+    vel = np.array([0.2, 0.15])
+    res = get_op("geodesic.polar_point")(m, init, vel, 0.5)  # raises if invariant fails
+    e0 = m.metric_norm_sq(init[0], vel[0], vel[1])
+    e1 = m.metric_norm_sq(res.point[0], res.velocity[0], res.velocity[1])
+    assert abs(e1 - e0) < 1e-9
+
+
+def test_geodesic_shortcut_measured_speedup():
+    from geocore import PolarPlane
+    from geocore.shortcuts import registry
+
+    m = PolarPlane()
+    init = np.array([2.0, 0.8])
+    vel = np.array([0.2, 0.15])
+    log = registry.benchmark("geodesic.polar_closed_form", m, init, vel, 0.5,
+                             n_trials=100, size_of=lambda *a: 2)
+    assert log.speedup_time > 1.0
+    assert log.speedup_flops > 1.0
