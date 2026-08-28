@@ -25,7 +25,7 @@ import numpy as np
 
 from .invariants import VerificationReport
 
-__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction", "optim_step_closed_form"]
+__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "geodesic_sphere_closed_form", "geodesic_hyperbolic_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction", "optim_step_closed_form"]
 
 
 @dataclasses.dataclass
@@ -323,6 +323,46 @@ optim_step_closed_form = registry.register(
         name="optim.step_closed_form",
         replaces=optim_step,
         impl=_optim_step_closed,
+        flops_generic=lambda n: 200 * 6,   # RK4: n_steps x ~6 ODE evals
+        flops_shortcut=lambda n: 20,        # closed form: a handful of trig ops
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Sixth shortcut: closed-form geodesics on the sphere and the hyperbolic
+# plane (great circles / semicircles vs RK4 ODE integration).
+# ---------------------------------------------------------------------------
+
+from .ops import geodesic_polar_point  # noqa: E402
+from .sphere import Sphere  # noqa: E402
+from .hyperbolic import HyperbolicPlane  # noqa: E402
+
+
+def _geodesic_sphere_closed(manifold, initial, velocity, t):
+    return manifold.geodesic_closed_form(initial, velocity, float(t))
+
+
+def _geodesic_hyperbolic_closed(manifold, initial, velocity, t):
+    return manifold.geodesic_closed_form(initial, velocity, float(t))
+
+
+geodesic_sphere_closed_form = registry.register(
+    Shortcut(
+        name="geodesic.sphere_closed_form",
+        replaces=geodesic_polar_point,
+        impl=_geodesic_sphere_closed,
+        flops_generic=lambda n: 200 * 6,   # RK4: n_steps x ~6 ODE evals
+        flops_shortcut=lambda n: 40,        # closed form: trig + inverse chart
+    )
+)
+
+
+geodesic_hyperbolic_closed_form = registry.register(
+    Shortcut(
+        name="geodesic.hyperbolic_closed_form",
+        replaces=geodesic_polar_point,
+        impl=_geodesic_hyperbolic_closed,
         flops_generic=lambda n: 200 * 6,   # RK4: n_steps x ~6 ODE evals
         flops_shortcut=lambda n: 20,        # closed form: a handful of trig ops
     )

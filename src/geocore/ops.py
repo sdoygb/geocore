@@ -246,9 +246,12 @@ geodesic_polar_point = op(
 )
 
 
-@geodesic_polar_point.register(PolarPlane, np.ndarray, np.ndarray, float)
-@geodesic_polar_point.register(PolarPlane, np.ndarray, np.ndarray, np.float64)
-def _(manifold, initial, velocity, t):
+@geodesic_polar_point.register_default
+def _(manifold, initial, velocity, t, **kwargs):
+    if not hasattr(manifold, "geodesic_generic"):
+        raise NotImplementedError(
+            f"geodesic.polar_point: {type(manifold).__name__} has no geodesic_generic"
+        )
     return manifold.geodesic_generic(initial, velocity, float(t))
 
 
@@ -314,11 +317,11 @@ optim_gradient = op(
 )
 
 
-@optim_gradient.register(PolarPlane, np.ndarray, np.ndarray)
+@optim_gradient.register_default
 def _(manifold, df, point, **kwargs):
     df = np.asarray(df, dtype=float)
-    r = float(point[0])
-    return np.array([df[0], df[1] / (r * r)])
+    g0, g1 = manifold.metric_diag(np.asarray(point, dtype=float))
+    return np.array([df[0] / g0, df[1] / g1])
 
 
 optim_step = op(
@@ -334,7 +337,7 @@ optim_step = op(
 )
 
 
-@optim_step.register(PolarPlane, np.ndarray, np.ndarray, float)
+@optim_step.register_default
 def _(manifold, point, descent_vector, lr, **kwargs):
     return manifold.geodesic_generic(
         point, lr * np.asarray(descent_vector, dtype=float), 1.0

@@ -120,9 +120,11 @@ geocore/
 │   ├── invariants.py        # L2: automatic verification
 │   ├── shortcuts.py         # L3: reduce computation + BenchmarkLog
 │   ├── optim.py             # Riemannian optimizer (≈ torch.optim)
+│   ├── sphere.py            # S²: spherical coords, great-circle geodesics
+│   ├── hyperbolic.py        # H²: upper half-plane, semicircle geodesics
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 43 tests
+└── tests/                   # 61 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -148,6 +150,32 @@ descent property).  The stateful `RiemannianSGD(lr, momentum)` mirrors
 `torch.optim.SGD`.  Measured per-step cost of the closed-form exponential
 map vs the RK4 ODE integration: **370× wall time, 60× FLOPs** (n=2).
 
+## Manifolds (all with closed-form geodesics, verified)
+
+| Manifold | Metric | Geodesic (closed form) | Verified truths |
+|---|---|---|---|
+| `PolarPlane` | dr² + r² dy² | straight line in Cartesian | energy drift ≤ 2e-16 |
+| `Sphere` (S²) | dθ² + sin²θ dφ² | great circle in R³ | \|p_t\| = 1, coplanarity det ≈ 1e-16, energy drift 6e-17 |
+| `HyperbolicPlane` (H²) | (dx² + dy²)/y² | semicircle / vertical line | (x−c)² + y² = R² exact, Poincaré distance additive to 1e-9 |
+
+Closed form vs RK4 ODE: agreement to ~5e-14.  Measured shortcuts:
+sphere **130× / 30×**, hyperbolic **910× / 60×** (wall time / FLOPs).
+The Riemannian optimizer runs on all three: on S² and H² it converges to
+the closed-form minimizer of the (squared) geodesic distance to a target
+to ~1e-10 with verified descent.
+
+```python
+from geocore import Sphere, minimize
+import numpy as np
+
+S = Sphere()
+target = [1.4, 2.0]
+f = lambda p: np.arccos(np.clip(np.sin(p[0])*np.sin(target[0])*np.cos(p[1]-target[1])
+                                + np.cos(p[0])*np.cos(target[0]), -1, 1))**2
+res = minimize(S, f, [0.9, 0.4], lr=0.3, n_steps=300, minimizer=target)
+# converged=True, minimizer_error≈4e-11, descent_ok=True
+```
+
 ## Roadmap (honest)
 
 Done so far — each with machine-precision verification + measured benchmark:
@@ -160,10 +188,13 @@ Done so far — each with machine-precision verification + measured benchmark:
    coefficients C(n,(n+1)/2)/2^{n+1} exact (48,595× / 1.6×10³×).
 5. ✅ Riemannian optimizer step (≈ torch.optim): closed-form exponential map
    vs RK4 (370× / 60×), gradient = Riesz representative, verified descent.
+6. ✅ Sphere S² and hyperbolic plane H²: closed-form great-circle /
+   semicircle geodesics vs RK4 (130× / 30× and 910× / 60×); optimizer
+   converges on both to ~1e-10 (geodesic-distance potentials).
 
 Next candidates (hypotheses to measure, not claims):
 - Vectorized/batched core paths.
-- More manifolds (sphere, hyperbolic) + their closed-form geodesics.
+- Adaptive step sizes (≈ torch.optim.Adam) on manifolds.
 - Application layers (QEC diagnostics, geometric statistics primitives).
 
 The theory is the engine, not the claim: what ships is standard math,

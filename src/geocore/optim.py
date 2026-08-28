@@ -167,7 +167,9 @@ def minimize(
         f_history.append(float(f(point)))
     df_final = _central_difference(f, point)
     grad_final = optim_gradient(manifold, df_final, point)
-    grad_norm = float(np.sqrt(manifold.metric_norm_sq(point[0], grad_final[0], grad_final[1])))
+    grad_norm = float(
+        np.sqrt(manifold.metric_norm_sq(point, grad_final))
+    )
     converged = grad_norm < atol
     minimizer_error = None
     if minimizer is not None:

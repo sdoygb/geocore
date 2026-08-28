@@ -130,11 +130,11 @@ Key operators in v0.1:
 | `rotation.merge` | (Rotation, Rotation) | R_P(t)R_P(s) = R_P(t+s), unitary |
 | `rotation.cancel` | (Rotation,) | θ ≡ 0 (2π) ⇒ identity |
 | `circuit.optimize` | (rotations,) | U(in) = C1 C2 … U(out) (unitary equivalence) |
-| `geodesic.polar_point` | (PolarPlane, p, v, t) | metric norm of velocity conserved |
+| `geodesic.polar_point` | (Manifold, p, v, t) | metric norm of velocity conserved |
 | `laplacian.eigenvalues` | (Circle, k, N) | valid ascending spectrum, PSD |
 | `qec.logical_error` | (θ, n) | closed form P_L to machine precision |
-| `optim.gradient` | (PolarPlane, df, p) | Riesz duality g(grad f, v) = df(v) |
-| `optim.step` | (PolarPlane, p, v, lr) | exp-map validity, r > 0, descent |
+| `optim.gradient` | (Manifold, df, p) | Riesz duality g(grad f, v) = df(v) |
+| `optim.step` | (Manifold, p, v, lr) | exp-map validity, in-chart, descent |
 
 ## Layer 2 — Automatic verification (≈ `autograd`)
 
@@ -226,7 +226,7 @@ First candidate shortcuts (to be measured, not assumed):
 |---|---|
 | `clifford.py` | Layer 0 (Pauli encoding) + Layer 1 (`pauli.*` ops) |
 | `rotations.py` | Layer 0 (Rotation) + Layer 1 (`rotation.*`, `circuit.optimize`) |
-| `manifolds.py` / `spectral.py` | Layer 0 (manifold objects) + Layer 1 (`geodesic.*`, `laplacian.*`) |
+| `manifolds.py` / `sphere.py` / `hyperbolic.py` / `spectral.py` | Layer 0 (manifold objects) + Layer 1 (`geodesic.*`, `laplacian.*`) |
 | `qec.py` | Application layer (QEC diagnostics) + Layer 1 (`qec.logical_error`) |
 | `optim.py` | Layer 1 (`optim.gradient`, `optim.step`) + application API (≈ `torch.optim`) |
 | `verify.py` | Layer 2 (first Invariant implementations) |

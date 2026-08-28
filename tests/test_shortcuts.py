@@ -76,8 +76,8 @@ def test_geodesic_energy_conservation_invariant():
     init = np.array([2.0, 0.8])
     vel = np.array([0.2, 0.15])
     res = get_op("geodesic.polar_point")(m, init, vel, 0.5)  # raises if invariant fails
-    e0 = m.metric_norm_sq(init[0], vel[0], vel[1])
-    e1 = m.metric_norm_sq(res.point[0], res.velocity[0], res.velocity[1])
+    e0 = m.metric_norm_sq(init, vel)
+    e1 = m.metric_norm_sq(res.point, res.velocity)
     assert abs(e1 - e0) < 1e-9
 
 

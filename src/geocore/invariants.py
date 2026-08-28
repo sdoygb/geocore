@@ -172,12 +172,8 @@ class GeodesicEnergyConservation(Invariant):
     name = "geodesic_energy_conservation"
 
     def check(self, result, manifold, initial, velocity, t, **kwargs) -> VerificationReport:
-        r0, y0 = float(initial[0]), float(initial[1])
-        v_r, v_y = float(velocity[0]), float(velocity[1])
-        e0 = manifold.metric_norm_sq(r0, v_r, v_y)
-        r_t, y_t = result.point
-        v_rt, v_yt = result.velocity
-        e_t = manifold.metric_norm_sq(r_t, v_rt, v_yt)
+        e0 = manifold.metric_norm_sq(initial, velocity)
+        e_t = manifold.metric_norm_sq(result.point, result.velocity)
         err = abs(e_t - e0)
         return VerificationReport(
             ok=err < max(self.atol, 1e-9),
@@ -237,14 +233,12 @@ class RieszGradientValidity(Invariant):
 
     def check(self, result, manifold, df, point, **kwargs) -> VerificationReport:
         rng = np.random.default_rng(0)
+        g0, g1 = manifold.metric_diag(np.asarray(point, dtype=float))
         worst = 0.0
         for _ in range(5):
             v = rng.standard_normal(2)
             v /= np.linalg.norm(v) + 1e-30
-            lhs = float(
-                result[0] * v[0]
-                + float(point[0]) ** 2 * result[1] * v[1]
-            )  # g(grad, v)
+            lhs = float(g0 * result[0] * v[0] + g1 * result[1] * v[1])  # g(grad, v)
             rhs = float(df[0] * v[0] + df[1] * v[1])  # df(v)
             worst = max(worst, abs(lhs - rhs))
         return VerificationReport(
@@ -280,11 +274,12 @@ class ManifoldConstraint(Invariant):
     name = "manifold_constraint"
 
     def check(self, result, manifold, point, descent_vector, lr, **kwargs) -> VerificationReport:
-        r = float(np.asarray(result)[0])
-        ok = r > 1e-12
+        in_chart = manifold.in_chart(np.asarray(result))
         return VerificationReport(
-            ok=ok,
-            details=f"step left the polar chart: r = {r:.3e} <= 0" if not ok else "",
+            ok=in_chart,
+            details=f"step left the chart: {np.round(np.asarray(result), 4)}"
+            if not in_chart
+            else "",
         )
 
 
