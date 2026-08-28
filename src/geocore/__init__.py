@@ -8,11 +8,12 @@ verified to machine precision (engine-presentation separation).
 
 __version__ = "0.1.0"
 
-from . import clifford, invariants, manifolds, objects, ops, qec, rotations, shortcuts, spectral, verify  # noqa: F401
+from . import clifford, invariants, manifolds, objects, ops, optim, qec, rotations, shortcuts, spectral, verify  # noqa: F401
 from .manifolds import PolarPlane  # noqa: F401
 from .spectral import Circle  # noqa: F401
 from .objects import Pauli, Rotation  # noqa: F401
 from .ops import dispatch, get_op, op  # noqa: F401
+from .optim import RiemannianSGD, OptimizationResult, minimize  # noqa: F401
 from .rotations import optimize_pauli_rotations  # noqa: F401
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "manifolds",
     "objects",
     "ops",
+    "optim",
     "qec",
     "rotations",
     "shortcuts",
@@ -30,6 +32,9 @@ __all__ = [
     "PolarPlane",
     "Circle",
     "Rotation",
+    "RiemannianSGD",
+    "OptimizationResult",
+    "minimize",
     "dispatch",
     "get_op",
     "op",

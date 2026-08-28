@@ -286,3 +286,56 @@ def _(theta, n):
     from .qec import repetition_code_logical_error
 
     return repetition_code_logical_error(float(theta), n)
+
+
+# ---------------------------------------------------------------------------
+# v0.3 geometric operators: Riemannian optimization (the analogue of
+# torch.optim).  The gradient is the Riesz representative of df w.r.t. the
+# metric; the step moves along the exponential map (a geodesic), which on
+# the polar plane has a closed form (a straight line in Cartesian
+# coordinates) — the Layer-3 shortcut for optimization.
+# ---------------------------------------------------------------------------
+
+from .invariants import (  # noqa: E402
+    DescentProperty,
+    ExponentialMapValidity,
+    ManifoldConstraint,
+    RieszGradientValidity,
+)
+
+optim_gradient = op(
+    "optim.gradient",
+    invariants=[RieszGradientValidity()],
+    theorem=(
+        "Riesz representation: the Riemannian gradient is grad f = g^{-1} df, "
+        "i.e. g(grad f, v) = df(v) for all tangent vectors v.  On the polar "
+        "plane g = diag(1, r^2), so grad f = (df_r, df_y / r^2)."
+    ),
+)
+
+
+@optim_gradient.register(PolarPlane, np.ndarray, np.ndarray)
+def _(manifold, df, point, **kwargs):
+    df = np.asarray(df, dtype=float)
+    r = float(point[0])
+    return np.array([df[0], df[1] / (r * r)])
+
+
+optim_step = op(
+    "optim.step",
+    invariants=[ExponentialMapValidity(), ManifoldConstraint(), DescentProperty()],
+    theorem=(
+        "Riemannian gradient step: p' = exp_p(lr * v) along the exponential "
+        "map (a geodesic of unit parameter).  On the polar plane the "
+        "exponential map is a straight line in Cartesian coordinates, so the "
+        "step has a closed form; the registered implementation is the generic "
+        "RK4 geodesic integration (the Layer-3 shortcut replaces it)."
+    ),
+)
+
+
+@optim_step.register(PolarPlane, np.ndarray, np.ndarray, float)
+def _(manifold, point, descent_vector, lr, **kwargs):
+    return manifold.geodesic_generic(
+        point, lr * np.asarray(descent_vector, dtype=float), 1.0
+    ).point

@@ -25,7 +25,7 @@ import numpy as np
 
 from .invariants import VerificationReport
 
-__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction"]
+__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction", "optim_step_closed_form"]
 
 
 @dataclasses.dataclass
@@ -297,5 +297,33 @@ qec_theta4_prediction = registry.register(
         impl=_theta4_predict,
         flops_generic=lambda n: 2**n,    # state-vector simulation: O(2^n)
         flops_shortcut=lambda n: 10,      # closed form: a handful of ops
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Fifth shortcut: closed-form exponential-map optimizer step (vs RK4 ODE).
+# ---------------------------------------------------------------------------
+
+from .ops import optim_step  # noqa: E402
+
+
+def _optim_step_closed(manifold, point, descent_vector, lr):
+    return manifold.geodesic_closed_form(
+        point, lr * np.asarray(descent_vector, dtype=float), 1.0
+    ).point
+
+
+def _optim_size(manifold, point, descent_vector, lr):
+    return 2  # 2-dimensional manifold
+
+
+optim_step_closed_form = registry.register(
+    Shortcut(
+        name="optim.step_closed_form",
+        replaces=optim_step,
+        impl=_optim_step_closed,
+        flops_generic=lambda n: 200 * 6,   # RK4: n_steps x ~6 ODE evals
+        flops_shortcut=lambda n: 20,        # closed form: a handful of trig ops
     )
 )

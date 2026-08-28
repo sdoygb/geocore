@@ -29,6 +29,10 @@ __all__ = [
     "RotationActionClosure",
     "LogicalErrorValidity",
     "SpectralValidity",
+    "RieszGradientValidity",
+    "ExponentialMapValidity",
+    "ManifoldConstraint",
+    "DescentProperty",
     "MergeClosure",
     "CancellationClosure",
     "UnitaryEquivalence",
@@ -221,6 +225,87 @@ class LogicalErrorValidity(Invariant):
         return VerificationReport(
             ok=bool(ok), max_error=err,
             details=f"P_L={result:.6e} vs closed form {exact:.6e}" if not ok else "",
+        )
+
+
+class RieszGradientValidity(Invariant):
+    """optim.gradient: the Riemannian gradient is the Riesz representative
+    of the covector df — g(grad f, v) = df(v) for every tangent vector v
+    (machine-precision duality check)."""
+
+    name = "riesz_gradient_validity"
+
+    def check(self, result, manifold, df, point, **kwargs) -> VerificationReport:
+        rng = np.random.default_rng(0)
+        worst = 0.0
+        for _ in range(5):
+            v = rng.standard_normal(2)
+            v /= np.linalg.norm(v) + 1e-30
+            lhs = float(
+                result[0] * v[0]
+                + float(point[0]) ** 2 * result[1] * v[1]
+            )  # g(grad, v)
+            rhs = float(df[0] * v[0] + df[1] * v[1])  # df(v)
+            worst = max(worst, abs(lhs - rhs))
+        return VerificationReport(
+            ok=worst < self.atol,
+            max_error=worst,
+            details=f"Riesz duality g(grad f, v) vs df(v) max error {worst:.2e}",
+        )
+
+
+class ExponentialMapValidity(Invariant):
+    """optim.step: the step endpoint equals the closed-form exponential map
+    exp_p(lr * v) (a straight line in Cartesian coordinates on the polar
+    plane) to machine precision."""
+
+    name = "exponential_map_validity"
+
+    def check(self, result, manifold, point, descent_vector, lr, **kwargs) -> VerificationReport:
+        exact = manifold.geodesic_closed_form(
+            point, lr * np.asarray(descent_vector, dtype=float), 1.0
+        ).point
+        err = float(np.abs(np.asarray(result) - exact).max())
+        return VerificationReport(
+            ok=err < 1e-8,  # generic RK4 path converges O(dt^4); atol ~ 1e-9
+            max_error=err,
+            details=f"exp-map step vs closed form max error {err:.2e}",
+        )
+
+
+class ManifoldConstraint(Invariant):
+    """optim.step: the result point stays on the manifold (polar chart
+    requires r > 0)."""
+
+    name = "manifold_constraint"
+
+    def check(self, result, manifold, point, descent_vector, lr, **kwargs) -> VerificationReport:
+        r = float(np.asarray(result)[0])
+        ok = r > 1e-12
+        return VerificationReport(
+            ok=ok,
+            details=f"step left the polar chart: r = {r:.3e} <= 0" if not ok else "",
+        )
+
+
+class DescentProperty(Invariant):
+    """optim.step: when a potential f is supplied (kwarg), the step does not
+    increase f: f(p') <= f(p) + tol (a local descent property of gradient
+    flow; checked automatically, like autograd's gradient correctness)."""
+
+    name = "descent_property"
+
+    def check(self, result, manifold, point, descent_vector, lr, f=None, **kwargs) -> VerificationReport:
+        if f is None:
+            return VerificationReport(ok=True, details="no potential supplied; descent unchecked")
+        f_before = float(f(np.asarray(point)))
+        f_after = float(f(np.asarray(result)))
+        tol = 1e-7
+        ok = f_after <= f_before + tol
+        return VerificationReport(
+            ok=ok,
+            max_error=max(0.0, f_after - f_before),
+            details=f"f: {f_before:.6e} -> {f_after:.6e}" if not ok else "",
         )
 
 

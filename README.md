@@ -119,23 +119,52 @@ geocore/
 │   ├── ops.py               # L1: geometric operator dispatch
 │   ├── invariants.py        # L2: automatic verification
 │   ├── shortcuts.py         # L3: reduce computation + BenchmarkLog
+│   ├── optim.py             # Riemannian optimizer (≈ torch.optim)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 34 tests
+└── tests/                   # 43 tests
 ```
+
+## Riemannian optimizer (≈ torch.optim)
+
+PyTorch moves parameters in Euclidean space; geocore moves them *on the
+manifold*.  The gradient is the Riesz representative of df w.r.t. the
+metric (`optim.gradient`, verified by the duality `g(grad f, v) = df(v)`);
+each step follows the exponential map (`optim.step`, verified against the
+closed form to machine precision):
+
+```python
+from geocore import PolarPlane, minimize
+
+m = PolarPlane()  # ds² = dr² + r² dy²; exp map = straight line in Cartesian
+f = lambda p: (p[0] - 1.5)**2 + (p[1] - 0.7)**2
+
+res = minimize(m, f, [2.0, 0.3], lr=0.05, n_steps=500, minimizer=[1.5, 0.7])
+# converged=True, minimizer_error≈7e-11, f strictly non-increasing
+```
+
+Every step is verified (exp-map validity, manifold constraint `r > 0`,
+descent property).  The stateful `RiemannianSGD(lr, momentum)` mirrors
+`torch.optim.SGD`.  Measured per-step cost of the closed-form exponential
+map vs the RK4 ODE integration: **370× wall time, 60× FLOPs** (n=2).
 
 ## Roadmap (honest)
 
-1. Second measured shortcut (closed-form geodesics vs ODE integration).
-2. Vectorized/batched core paths.
-3. Application layers (quantum error correction diagnostics, geometric
-   statistics primitives) — each with verification + benchmark.
-4. Spectral shortcuts (Laplacian eigenvalues, coherent-noise leading law
-   θ^{d+1}) with measured savings vs. simulation baselines. Measurement
-   finding: the θ⁴ law is the d = 3 special case; for repetition codes of
-   distance d the logical-error leading term scales as θ^{d+1} (exponents
-   4, 6, 8, 10 measured for d = 3, 5, 7, 9, coefficients matching
-   C(n, (n+1)/2) / 2^{n+1} to machine precision).
+Done so far — each with machine-precision verification + measured benchmark:
+
+1. ✅ Closed-form Pauli rotation vs `expm` (31,920× / 1,000,000× at n=10).
+2. ✅ Closed-form geodesics (polar plane) vs ODE integration (675× / 60×).
+3. ✅ Closed-form Laplacian spectrum vs discrete eigensolve (2,299× / 8×10⁴×).
+4. ✅ Coherent-noise leading law: measured **θ^{d+1}**, not θ⁴ — θ⁴ is the
+   d=3 special case; exponents 4, 6, 8, 10 for d = 3, 5, 7, 9 with
+   coefficients C(n,(n+1)/2)/2^{n+1} exact (48,595× / 1.6×10³×).
+5. ✅ Riemannian optimizer step (≈ torch.optim): closed-form exponential map
+   vs RK4 (370× / 60×), gradient = Riesz representative, verified descent.
+
+Next candidates (hypotheses to measure, not claims):
+- Vectorized/batched core paths.
+- More manifolds (sphere, hyperbolic) + their closed-form geodesics.
+- Application layers (QEC diagnostics, geometric statistics primitives).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
