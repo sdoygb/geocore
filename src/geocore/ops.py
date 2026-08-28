@@ -25,12 +25,14 @@ from .invariants import (
     GeodesicEnergyConservation,
     MergeClosure,
     RotationActionClosure,
+    SpectralValidity,
     SymplecticForm,
     UnitaryEquivalence,
     VerificationContext,
     VerificationError,
 )
 from .manifolds import PolarPlane
+from .spectral import Circle
 from .objects import Pauli, Rotation
 
 __all__ = ["Operator", "op", "get_op", "registry", "dispatch"]
@@ -247,3 +249,20 @@ geodesic_polar_point = op(
 @geodesic_polar_point.register(PolarPlane, np.ndarray, np.ndarray, np.float64)
 def _(manifold, initial, velocity, t):
     return manifold.geodesic_generic(initial, velocity, float(t))
+
+
+laplacian_eigenvalues = op(
+    "laplacian.eigenvalues",
+    invariants=[SpectralValidity()],
+    theorem=(
+        "The Laplace-Beltrami spectrum is a geometric invariant of the "
+        "manifold; on S^1 the eigenvalues are k^2 (multiplicity 2).  The "
+        "generic path diagonalizes the discrete Laplacian (cycle graph, "
+        "scaled by 1/h^2), which converges to the exact spectrum as O(n^-2)."
+    ),
+)
+
+
+@laplacian_eigenvalues.register(Circle, int, int)
+def _(manifold, n_evals, n_grid):
+    return manifold.laplacian_discrete_eigenvalues(n_grid, n_evals)

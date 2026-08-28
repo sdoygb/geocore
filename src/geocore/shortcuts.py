@@ -25,7 +25,7 @@ import numpy as np
 
 from .invariants import VerificationReport
 
-__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form"]
+__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "laplacian_circle_closed_form"]
 
 
 @dataclasses.dataclass
@@ -162,13 +162,14 @@ class ShortcutRegistry:
     def get(self, name: str) -> Shortcut:
         return self._shortcuts[name]
 
-    def apply(self, name: str, *args, verify=True):
+    def apply(self, name: str, *args, verify=True, **kwargs):
         """Run a shortcut: verify against the generic path, then compute.
 
-        Returns (result, VerificationReport).
+        Returns (result, VerificationReport).  ``kwargs`` are forwarded to
+        ``verify_against`` (e.g. ``atol`` for convergence-aware checks).
         """
         shortcut = self._shortcuts[name]
-        report = shortcut.verify_against(*args) if verify else None
+        report = shortcut.verify_against(*args, **kwargs) if verify else None
         return shortcut.impl(*args), report
 
     def benchmark(self, name: str, *args, **kwargs) -> BenchmarkLog:
@@ -226,5 +227,32 @@ geodesic_polar_closed_form = registry.register(
         impl=_geodesic_polar_closed_form,
         flops_generic=lambda n: 200 * 6,   # RK4: n_steps x ~6 ODE evals
         flops_shortcut=lambda n: 20,        # closed form: a handful of trig ops
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Third shortcut: closed-form Laplacian spectrum (vs discrete eigensolve).
+# ---------------------------------------------------------------------------
+
+from .ops import laplacian_eigenvalues  # noqa: E402
+from .spectral import Circle  # noqa: E402
+
+
+def _laplacian_circle_closed(manifold, n_evals, n_grid):
+    return manifold.laplacian_eigenvalues_closed(n_evals)
+
+
+def _spectral_size(manifold, n_evals, n_grid):
+    return n_grid
+
+
+laplacian_circle_closed_form = registry.register(
+    Shortcut(
+        name="laplacian.circle_closed_form",
+        replaces=laplacian_eigenvalues,
+        impl=_laplacian_circle_closed,
+        flops_generic=lambda N: N**3,     # eigvalsh of N x N: O(N^3)
+        flops_shortcut=lambda N: 2 * N,    # closed form: a handful of squares
     )
 )

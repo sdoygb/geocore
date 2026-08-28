@@ -27,6 +27,7 @@ __all__ = [
     "ConjugationMatrixTruth",
     "GeodesicEnergyConservation",
     "RotationActionClosure",
+    "SpectralValidity",
     "MergeClosure",
     "CancellationClosure",
     "UnitaryEquivalence",
@@ -177,6 +178,28 @@ class GeodesicEnergyConservation(Invariant):
             ok=err < max(self.atol, 1e-9),
             max_error=err,
             details=f"energy drift {err:.2e} (initial {e0:.6f})",
+        )
+
+
+class SpectralValidity(Invariant):
+    """laplacian.eigenvalues: the output is a valid ascending non-negative
+    spectrum (the discrete Laplacian is positive semidefinite — a spectral
+    property of the geometric Laplacian)."""
+
+    name = "spectral_validity"
+
+    def check(self, result, manifold, n_evals, n_grid, **kwargs) -> VerificationReport:
+        evals = np.asarray(result, dtype=float)
+        tol = 1e-8  # near-degenerate eigh output jitters at O(1e-10)
+        ok = (
+            evals.ndim == 1
+            and len(evals) == n_evals
+            and evals[0] >= -tol
+            and bool(np.all(np.diff(evals) >= -tol))
+        )
+        return VerificationReport(
+            ok=ok,
+            details="spectrum is not a valid ascending non-negative list" if not ok else "",
         )
 
 

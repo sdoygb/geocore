@@ -92,3 +92,43 @@ def test_geodesic_shortcut_measured_speedup():
                              n_trials=100, size_of=lambda *a: 2)
     assert log.speedup_time > 1.0
     assert log.speedup_flops > 1.0
+
+
+def test_spectral_closed_form_matches_within_discretization():
+    """Closed form == discrete spectrum within the O(n^-2) error, which
+    shrinks by ~4x per doubling of the grid (convergence verification)."""
+    from geocore import Circle
+    from geocore.shortcuts import registry
+
+    c = Circle()
+    errs = []
+    for N in [100, 200, 400, 800]:
+        res, report = registry.apply("laplacian.circle_closed_form", c, 4, N,
+                                     verify=True, atol=1e-2)
+        assert report.ok, report.details
+        closed = c.laplacian_eigenvalues_closed(4)
+        numeric = c.laplacian_discrete_eigenvalues(N, 4)
+        errs.append(np.abs(numeric - closed).max())
+    # O(n^-2): each doubling of N cuts the error ~4x
+    ratios = [errs[i] / errs[i + 1] for i in range(len(errs) - 1)]
+    assert all(2.5 < r < 6.0 for r in ratios), ratios
+    assert errs[-1] < 1e-4
+
+
+def test_spectral_shortcut_measured_speedup():
+    from geocore import Circle
+    from geocore.shortcuts import registry
+
+    c = Circle()
+    log = registry.benchmark("laplacian.circle_closed_form", c, 4, 400,
+                             n_trials=3, size_of=lambda *a: a[2])
+    assert log.speedup_time > 100.0, log
+    assert log.speedup_flops > 1000.0, log
+
+
+def test_spectral_validity_invariant():
+    from geocore import Circle, get_op
+
+    c = Circle()
+    evals = get_op("laplacian.eigenvalues")(c, 5, 200)  # raises if invalid
+    assert len(evals) == 5 and evals[0] >= -1e-8
