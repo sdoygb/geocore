@@ -1,13 +1,29 @@
 """geocore — geometric computation core.
 
-Clifford/Pauli algebra, geometric rotation objects, and machine-precision
-verification.  The derivation engine is the geometry theory; the
-presentation is standard mathematics verified to machine precision.
+Clifford/Pauli algebra, geometric objects (Pauli, Rotation), geometric
+operator dispatch, and machine-precision verification.  The derivation
+engine is the geometry theory; the presentation is standard mathematics
+verified to machine precision (engine-presentation separation).
 """
 
 __version__ = "0.1.0"
 
-from . import clifford, rotations, verify  # noqa: F401
-from .rotations import PauliRotation, optimize_pauli_rotations  # noqa: F401
+from . import clifford, objects, ops, rotations, verify  # noqa: F401
+from .objects import Pauli, Rotation  # noqa: F401
+from .ops import dispatch, get_op, op  # noqa: F401
+from .rotations import optimize_pauli_rotations  # noqa: F401
 
-__all__ = ["clifford", "rotations", "verify", "PauliRotation", "optimize_pauli_rotations", "__version__"]
+__all__ = [
+    "clifford",
+    "objects",
+    "ops",
+    "rotations",
+    "verify",
+    "Pauli",
+    "Rotation",
+    "dispatch",
+    "get_op",
+    "op",
+    "optimize_pauli_rotations",
+    "__version__",
+]
