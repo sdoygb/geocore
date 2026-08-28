@@ -17,10 +17,13 @@ total unitary to machine precision and terminates at the fixed point
 
 from __future__ import annotations
 
+import numpy as np
+
 from .invariants import (
     CancellationClosure,
     ConjugationMatrixTruth,
     MergeClosure,
+    RotationActionClosure,
     SymplecticForm,
     UnitaryEquivalence,
     VerificationContext,
@@ -200,3 +203,26 @@ def _(rotations):
     from .rotations import optimize_pauli_rotations
 
     return optimize_pauli_rotations(rotations)
+
+
+rotation_apply_to_state = op(
+    "rotation.apply_to_state",
+    invariants=[RotationActionClosure()],
+    theorem=(
+        "R_P(theta)|psi> = cos(theta/2)|psi> - i sin(theta/2) P|psi> "
+        "(P^2 = I: the rotation orbit of the Pauli axis closes in two "
+        "steps).  The registered implementation is the generic dense "
+        "matrix-exponential path; the closed form is a Layer-3 shortcut."
+    ),
+)
+
+
+@rotation_apply_to_state.register(Rotation, np.ndarray)
+def _(rotation, state):
+    from scipy.linalg import expm
+
+    from .verify import _pauli_matrix
+
+    P = _pauli_matrix(rotation.axis)
+    U = expm(-1j * rotation.theta / 2 * P)
+    return U @ state

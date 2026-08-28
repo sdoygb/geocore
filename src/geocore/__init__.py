@@ -8,7 +8,7 @@ verified to machine precision (engine-presentation separation).
 
 __version__ = "0.1.0"
 
-from . import clifford, invariants, objects, ops, rotations, verify  # noqa: F401
+from . import clifford, invariants, objects, ops, rotations, shortcuts, verify  # noqa: F401
 from .objects import Pauli, Rotation  # noqa: F401
 from .ops import dispatch, get_op, op  # noqa: F401
 from .rotations import optimize_pauli_rotations  # noqa: F401
@@ -19,6 +19,7 @@ __all__ = [
     "objects",
     "ops",
     "rotations",
+    "shortcuts",
     "verify",
     "Pauli",
     "Rotation",

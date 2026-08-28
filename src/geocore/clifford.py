@@ -116,3 +116,41 @@ def apply_gates_to_pauli(gates, x, z):
     for gate, args in gates:
         x, z, r = apply_clifford_to_pauli(gate, args, x, z, r)
     return x, z, r
+
+
+def pauli_action_on_state(axis: str, state):
+    """Action of the Pauli P on a state vector (O(2^n)).
+
+    Decompose P = i^m X^x Z^z (Y = i X Z, so m = number of Y factors).
+    Z acts first (signs by original bits), then X (a bitwise permutation),
+    then the global phase i^m.  Never builds the dense 2^n x 2^n matrix.
+    """
+    n = len(axis)
+    xbits = [q for q, c in enumerate(axis) if c in ("X", "Y")]
+    zbits = [q for q, c in enumerate(axis) if c in ("Z", "Y")]
+    n_y = axis.count("Y")
+
+    idx = np.arange(state.size)
+    out = state.copy()
+    # Z^z: sign flips by the original bit values
+    for q in zbits:
+        bit = 1 << (n - 1 - q)
+        out = np.where((idx >> (n - 1 - q)) & 1, -out, out)
+    # X^x: accumulate the bitwise permutation, apply once
+    for q in xbits:
+        bit = 1 << (n - 1 - q)
+        idx = idx ^ bit
+    out = out[idx]
+    # global phase i^m
+    return (1j ** n_y) * out
+
+
+def rotation_action_closed_form(axis: str, theta: float, state):
+    """R_P(theta)|psi> = cos(theta/2)|psi> - i sin(theta/2) P|psi>.
+
+    Closed form because P^2 = I (the rotation orbit of the Pauli axis
+    closes in two steps); O(2^n) instead of O(8^n) for a dense expm.
+    """
+    c = np.cos(theta / 2)
+    s = np.sin(theta / 2)
+    return c * state - 1j * s * pauli_action_on_state(axis, state)

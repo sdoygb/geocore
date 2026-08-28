@@ -25,6 +25,7 @@ __all__ = [
     "Invariant",
     "SymplecticForm",
     "ConjugationMatrixTruth",
+    "RotationActionClosure",
     "MergeClosure",
     "CancellationClosure",
     "UnitaryEquivalence",
@@ -135,6 +136,24 @@ class CancellationClosure(Invariant):
             details=f"cancels({a})={result} but 2-pi closure gives {expected}"
             if result != expected
             else "",
+        )
+
+
+class RotationActionClosure(Invariant):
+    """rotation.apply_to_state: result must equal the closed-form action
+    cos(theta/2)|psi> - i sin(theta/2) P|psi> (exists because P^2 = I)."""
+
+    name = "rotation_action_closure"
+
+    def check(self, result, rotation, state, **kwargs) -> VerificationReport:
+        from .clifford import rotation_action_closed_form
+
+        expected = rotation_action_closed_form(rotation.axis, rotation.theta, state)
+        err = float(np.abs(np.asarray(result) - expected).max())
+        return VerificationReport(
+            ok=err < self.atol,
+            max_error=err,
+            details=f"rotation action closure max error {err:.2e}",
         )
 
 
