@@ -27,6 +27,7 @@ __all__ = [
     "ConjugationMatrixTruth",
     "GeodesicEnergyConservation",
     "RotationActionClosure",
+    "LogicalErrorValidity",
     "SpectralValidity",
     "MergeClosure",
     "CancellationClosure",
@@ -201,6 +202,28 @@ class SpectralValidity(Invariant):
             ok=ok,
             details="spectrum is not a valid ascending non-negative list" if not ok else "",
         )
+
+
+class LogicalErrorValidity(Invariant):
+    """qec.logical_error: the result is a valid probability (0 <= P_L <= 1)
+    and, for the 3-qubit code, matches the exact closed form to machine
+    precision."""
+
+    name = "logical_error_validity"
+
+    def check(self, result, theta, n, **kwargs) -> VerificationReport:
+        from .qec import repetition_closed_form
+
+        ok = 0.0 - 1e-12 <= result <= 1.0 + 1e-12
+        if n == 3:
+            exact = repetition_closed_form(float(theta))
+            err = abs(result - exact)
+            ok = ok and err < 1e-12
+            return VerificationReport(
+                ok=bool(ok), max_error=err,
+                details=f"P_L={result:.6e} vs closed form {exact:.6e}" if not ok else "",
+            )
+        return VerificationReport(ok=bool(ok), details="" if ok else "P_L not in [0,1]")
 
 
 class UnitaryEquivalence(Invariant):

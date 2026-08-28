@@ -25,7 +25,7 @@ import numpy as np
 
 from .invariants import VerificationReport
 
-__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "laplacian_circle_closed_form"]
+__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "laplacian_circle_closed_form", "qec_theta4_prediction"]
 
 
 @dataclasses.dataclass
@@ -254,5 +254,31 @@ laplacian_circle_closed_form = registry.register(
         impl=_laplacian_circle_closed,
         flops_generic=lambda N: N**3,     # eigvalsh of N x N: O(N^3)
         flops_shortcut=lambda N: 2 * N,    # closed form: a handful of squares
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Fourth shortcut: theta^4 logical-error prediction (vs O(2^n) simulation).
+# ---------------------------------------------------------------------------
+
+from .ops import qec_logical_error  # noqa: E402
+
+
+def _theta4_predict(theta, n):
+    return (3.0 / 16.0) * float(theta) ** 4
+
+
+def _qec_size(theta, n):
+    return n
+
+
+qec_theta4_prediction = registry.register(
+    Shortcut(
+        name="qec.theta4_prediction",
+        replaces=qec_logical_error,
+        impl=_theta4_predict,
+        flops_generic=lambda n: 2**n,    # state-vector simulation: O(2^n)
+        flops_shortcut=lambda n: 10,      # closed form: a handful of ops
     )
 )

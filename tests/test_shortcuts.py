@@ -132,3 +132,37 @@ def test_spectral_validity_invariant():
     c = Circle()
     evals = get_op("laplacian.eigenvalues")(c, 5, 200)  # raises if invalid
     assert len(evals) == 5 and evals[0] >= -1e-8
+
+
+def test_theta4_scaling_is_measured_not_assumed():
+    """The theta^4 law is verified empirically, not assumed: the measured
+    exponent is ~4 and the leading coefficient is ~3/16."""
+    from geocore.qec import measure_scaling_exponent, theta4_leading, repetition_code_logical_error
+
+    exponent, coeff = measure_scaling_exponent()
+    assert abs(exponent - 4.0) < 0.1, f"measured exponent {exponent}"
+    assert abs(coeff - 3.0 / 16.0) < 1e-2, f"measured coefficient {coeff}"
+    # leading law matches exact to within 5% for small theta
+    for t in [0.05, 0.1, 0.2]:
+        exact = repetition_code_logical_error(t)
+        assert abs(theta4_leading(t) - exact) / exact < 0.05
+
+
+def test_theta4_shortcut_verifies_and_speeds_up():
+    from geocore import get_op
+    from geocore.shortcuts import registry
+
+    # generic path self-checks against the exact closed form (L2)
+    p = get_op("qec.logical_error")(0.1, 3)
+    assert abs(p - 3 * np.sin(0.05) ** 4 * np.cos(0.05) ** 2 - np.sin(0.05) ** 6) < 1e-12
+
+    # shortcut verifies within leading-order accuracy for small theta
+    res, report = registry.apply("qec.theta4_prediction", 0.1, 3, verify=True, atol=5e-3)
+    assert report.ok
+    assert abs(res - 3 * 0.1**4 / 16) < 1e-12
+
+    # measured speedup: O(2^n) simulation vs O(1) prediction
+    log = registry.benchmark("qec.theta4_prediction", 0.1, 12, n_trials=30,
+                             size_of=lambda t, n: n)
+    assert log.speedup_time > 1.0
+    assert log.speedup_flops > 100.0

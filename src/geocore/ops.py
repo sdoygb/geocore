@@ -23,6 +23,7 @@ from .invariants import (
     CancellationClosure,
     ConjugationMatrixTruth,
     GeodesicEnergyConservation,
+    LogicalErrorValidity,
     MergeClosure,
     RotationActionClosure,
     SpectralValidity,
@@ -266,3 +267,22 @@ laplacian_eigenvalues = op(
 @laplacian_eigenvalues.register(Circle, int, int)
 def _(manifold, n_evals, n_grid):
     return manifold.laplacian_discrete_eigenvalues(n_grid, n_evals)
+
+
+qec_logical_error = op(
+    "qec.logical_error",
+    invariants=[LogicalErrorValidity()],
+    theorem=(
+        "Coherent X-rotation noise on the repetition code: P_L(theta) = "
+        "3 sin^4(theta/2) cos^2(theta/2) + sin^6(theta/2) for the 3-qubit "
+        "code, leading term (3/16) theta^4 (measured exponent ~4).  The "
+        "generic path is the O(2^n) state-vector simulation."
+    ),
+)
+
+
+@qec_logical_error.register(float, int)
+def _(theta, n):
+    from .qec import repetition_code_logical_error
+
+    return repetition_code_logical_error(float(theta), n)

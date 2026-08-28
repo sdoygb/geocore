@@ -8,7 +8,7 @@ verified to machine precision (engine-presentation separation).
 
 __version__ = "0.1.0"
 
-from . import clifford, invariants, manifolds, objects, ops, rotations, shortcuts, spectral, verify  # noqa: F401
+from . import clifford, invariants, manifolds, objects, ops, qec, rotations, shortcuts, spectral, verify  # noqa: F401
 from .manifolds import PolarPlane  # noqa: F401
 from .spectral import Circle  # noqa: F401
 from .objects import Pauli, Rotation  # noqa: F401
@@ -21,6 +21,7 @@ __all__ = [
     "manifolds",
     "objects",
     "ops",
+    "qec",
     "rotations",
     "shortcuts",
     "spectral",
