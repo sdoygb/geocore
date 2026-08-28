@@ -215,15 +215,13 @@ class LogicalErrorValidity(Invariant):
         from .qec import repetition_closed_form
 
         ok = 0.0 - 1e-12 <= result <= 1.0 + 1e-12
-        if n == 3:
-            exact = repetition_closed_form(float(theta))
-            err = abs(result - exact)
-            ok = ok and err < 1e-12
-            return VerificationReport(
-                ok=bool(ok), max_error=err,
-                details=f"P_L={result:.6e} vs closed form {exact:.6e}" if not ok else "",
-            )
-        return VerificationReport(ok=bool(ok), details="" if ok else "P_L not in [0,1]")
+        exact = repetition_closed_form(float(theta), int(n))
+        err = abs(result - exact)
+        ok = ok and err < 1e-12
+        return VerificationReport(
+            ok=bool(ok), max_error=err,
+            details=f"P_L={result:.6e} vs closed form {exact:.6e}" if not ok else "",
+        )
 
 
 class UnitaryEquivalence(Invariant):

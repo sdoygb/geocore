@@ -166,3 +166,28 @@ def test_theta4_shortcut_verifies_and_speeds_up():
                              size_of=lambda t, n: n)
     assert log.speedup_time > 1.0
     assert log.speedup_flops > 100.0
+
+
+def test_theta_scaling_is_distance_dependent():
+    """The measured finding: theta^4 is the d=3 case; the general law is
+    theta^{d+1} (exponents 4, 6, 8, 10 for d = 3, 5, 7, 9)."""
+    from geocore.qec import measure_scaling_exponent, scaling_leading, repetition_code_logical_error
+
+    for n, expected_exp in [(3, 4), (5, 6), (7, 8), (9, 10)]:
+        exponent, _ = measure_scaling_exponent(n)
+        assert abs(exponent - expected_exp) < 0.1, (n, exponent)
+        # leading coefficient verified exactly at small theta
+        theta = 0.01
+        exact = repetition_code_logical_error(theta, n)
+        assert abs(scaling_leading(theta, n) - exact) / exact < 0.02, n
+
+
+def test_scaling_prediction_shortcut():
+    from geocore.shortcuts import registry
+
+    for n in [3, 5, 7]:
+        res, report = registry.apply("qec.scaling_prediction", 0.05, n, verify=True, atol=1e-3)
+        assert report.ok, (n, report.details)
+    log = registry.benchmark("qec.scaling_prediction", 0.1, 14, n_trials=20,
+                             size_of=lambda t, n: n)
+    assert log.speedup_flops > 100.0

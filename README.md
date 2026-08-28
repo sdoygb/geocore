@@ -121,7 +121,7 @@ geocore/
 │   ├── shortcuts.py         # L3: reduce computation + BenchmarkLog
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 24 tests
+└── tests/                   # 34 tests
 ```
 
 ## Roadmap (honest)
@@ -130,8 +130,12 @@ geocore/
 2. Vectorized/batched core paths.
 3. Application layers (quantum error correction diagnostics, geometric
    statistics primitives) — each with verification + benchmark.
-4. Spectral shortcuts (Laplacian eigenvalues, θ⁴ scaling) with measured
-   savings vs. simulation baselines.
+4. Spectral shortcuts (Laplacian eigenvalues, coherent-noise leading law
+   θ^{d+1}) with measured savings vs. simulation baselines. Measurement
+   finding: the θ⁴ law is the d = 3 special case; for repetition codes of
+   distance d the logical-error leading term scales as θ^{d+1} (exponents
+   4, 6, 8, 10 measured for d = 3, 5, 7, 9, coefficients matching
+   C(n, (n+1)/2) / 2^{n+1} to machine precision).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.

@@ -25,7 +25,7 @@ import numpy as np
 
 from .invariants import VerificationReport
 
-__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "laplacian_circle_closed_form", "qec_theta4_prediction"]
+__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction"]
 
 
 @dataclasses.dataclass
@@ -269,8 +269,25 @@ def _theta4_predict(theta, n):
     return (3.0 / 16.0) * float(theta) ** 4
 
 
+def _scaling_predict(theta, n):
+    from .qec import scaling_leading
+
+    return scaling_leading(float(theta), int(n))
+
+
 def _qec_size(theta, n):
     return n
+
+
+qec_scaling_prediction = registry.register(
+    Shortcut(
+        name="qec.scaling_prediction",
+        replaces=qec_logical_error,
+        impl=_scaling_predict,
+        flops_generic=lambda n: 2**n,    # state-vector simulation: O(2^n)
+        flops_shortcut=lambda n: 10,      # leading-law prediction: O(1)
+    )
+)
 
 
 qec_theta4_prediction = registry.register(
