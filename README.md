@@ -124,7 +124,7 @@ geocore/
 │   ├── hyperbolic.py        # H²: upper half-plane, semicircle geodesics
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 61 tests
+└── tests/                   # 71 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -149,6 +149,36 @@ Every step is verified (exp-map validity, manifold constraint `r > 0`,
 descent property).  The stateful `RiemannianSGD(lr, momentum)` mirrors
 `torch.optim.SGD`.  Measured per-step cost of the closed-form exponential
 map vs the RK4 ODE integration: **370× wall time, 60× FLOPs** (n=2).
+
+### RiemannianAdam (≈ torch.optim.Adam)
+
+Adaptive moment estimation on the manifold: first/second moment buffers
+live in the tangent space, and after each step they are **parallel
+transported** along the step's geodesic to the new point (the second
+moment via its square root, so it stays positive).  Transport is verified
+to be an isometry; the buffers' metric norm is preserved to ~1e-17.
+
+```python
+from geocore import Sphere, minimize
+import numpy as np
+
+S = Sphere()
+target = [1.4, 2.0]
+f = lambda p: np.arccos(np.clip(np.sin(p[0])*np.sin(target[0])*np.cos(p[1]-target[1])
+                                + np.cos(p[0])*np.cos(target[0]), -1, 1))**2
+res = minimize(S, f, [0.9, 0.4], lr=0.1, n_steps=500, optimizer="adam",
+               minimizer=target, atol=1e-5)
+# converged=True, minimizer_error≈3e-11 (descent_ok reported honestly —
+# Adam overshoots early flat-region steps; a step leaving the chart
+# raises a clear error instead of failing silently)
+```
+
+Adam converges on all three manifolds to ~1e-11 (squared geodesic
+distance to a target).  Parallel transport is a first-class geometric op
+(`geodesic.parallel_transport`) with the isometry invariant: sphere =
+SO(3) rotation, hyperbolic = rotation + scaling, polar plane = coordinate
+rotation + scaling (the flat plane's transport is the identity only in
+Cartesian coordinates — the invariant caught this when tested).
 
 ## Manifolds (all with closed-form geodesics, verified)
 
@@ -191,10 +221,12 @@ Done so far — each with machine-precision verification + measured benchmark:
 6. ✅ Sphere S² and hyperbolic plane H²: closed-form great-circle /
    semicircle geodesics vs RK4 (130× / 30× and 910× / 60×); optimizer
    converges on both to ~1e-10 (geodesic-distance potentials).
+7. ✅ RiemannianAdam (≈ torch.optim.Adam): adaptive steps + parallel
+   transport of moment buffers (verified isometry, positivity-preserving
+   via √v); converges on all three manifolds to ~1e-11.
 
 Next candidates (hypotheses to measure, not claims):
 - Vectorized/batched core paths.
-- Adaptive step sizes (≈ torch.optim.Adam) on manifolds.
 - Application layers (QEC diagnostics, geometric statistics primitives).
 
 The theory is the engine, not the claim: what ships is standard math,

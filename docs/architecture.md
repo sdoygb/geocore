@@ -135,6 +135,7 @@ Key operators in v0.1:
 | `qec.logical_error` | (θ, n) | closed form P_L to machine precision |
 | `optim.gradient` | (Manifold, df, p) | Riesz duality g(grad f, v) = df(v) |
 | `optim.step` | (Manifold, p, v, lr) | exp-map validity, in-chart, descent |
+| `geodesic.parallel_transport` | (Manifold, p, q, V) | isometry: g_q(V',V') = g_p(V,V) |
 
 ## Layer 2 — Automatic verification (≈ `autograd`)
 
@@ -228,7 +229,7 @@ First candidate shortcuts (to be measured, not assumed):
 | `rotations.py` | Layer 0 (Rotation) + Layer 1 (`rotation.*`, `circuit.optimize`) |
 | `manifolds.py` / `sphere.py` / `hyperbolic.py` / `spectral.py` | Layer 0 (manifold objects) + Layer 1 (`geodesic.*`, `laplacian.*`) |
 | `qec.py` | Application layer (QEC diagnostics) + Layer 1 (`qec.logical_error`) |
-| `optim.py` | Layer 1 (`optim.gradient`, `optim.step`) + application API (≈ `torch.optim`) |
+| `optim.py` | Layer 1 (`optim.gradient`, `optim.step`) + application API (≈ `torch.optim`: SGD, Adam) |
 | `verify.py` | Layer 2 (first Invariant implementations) |
 | `shortcuts.py` | Layer 3 (ShortcutRegistry + BenchmarkLog) |
 

@@ -80,5 +80,51 @@ class Sphere(RiemannianManifold):
         v_ph_t = float(v_t @ e_ph_t) / (st_t * st_t)
         return GeodesicSolution([theta_t, phi_t], [v_th_t, v_ph_t])
 
+    def parallel_transport(self, point_from, point_to, vector):
+        """Parallel transport along the connecting great circle: a rotation
+        about the axis p0 x p1 by the angular distance.
+
+        In the R^3 embedding, transport along the great circle from p0 to
+        p1 is the rotation R(k, phi) with axis k = (p0 x p1)/|p0 x p1| and
+        angle phi = acos(p0 . p1) — an isometry of the tangent spaces
+        (metric norm preserved, exact up to floating point).
+        """
+        th0, ph0 = float(point_from[0]), float(point_from[1])
+        th1, ph1 = float(point_to[0]), float(point_to[1])
+        v = np.asarray(vector, dtype=float)
+        p0 = self._to_r3(th0, ph0)
+        p1 = self._to_r3(th1, ph1)
+        # embedding tangent at p0
+        st, ct = np.sin(th0), np.cos(th0)
+        e_th = np.array([ct * np.cos(ph0), ct * np.sin(ph0), -st])
+        e_ph = np.array([-st * np.sin(ph0), st * np.cos(ph0), 0.0])
+        V = v[0] * e_th + v[1] * e_ph
+        cos_phi = float(np.clip(p0 @ p1, -1.0, 1.0))
+        phi = np.arccos(cos_phi)
+        if phi < 1e-14:
+            return v.copy()
+        axis = np.cross(p0, p1)
+        axis /= np.linalg.norm(axis)
+        K = np.array(
+            [
+                [0.0, -axis[2], axis[1]],
+                [axis[2], 0.0, -axis[0]],
+                [-axis[1], axis[0], 0.0],
+            ]
+        )
+        R = (
+            np.cos(phi) * np.eye(3)
+            + np.sin(phi) * K
+            + (1.0 - np.cos(phi)) * np.outer(axis, axis)
+        )
+        V1 = R @ V
+        # back to spherical coordinates at point_to
+        st1, ct1 = np.sin(th1), np.cos(th1)
+        e_th1 = np.array([ct1 * np.cos(ph1), ct1 * np.sin(ph1), -st1])
+        e_ph1 = np.array([-st1 * np.sin(ph1), st1 * np.cos(ph1), 0.0])
+        return np.array(
+            [float(V1 @ e_th1), float(V1 @ e_ph1) / (st1 * st1)]
+        )
+
     def __repr__(self):
         return "Sphere(ds^2 = dθ^2 + sin^2θ dφ^2)"

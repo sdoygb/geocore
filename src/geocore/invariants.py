@@ -33,6 +33,7 @@ __all__ = [
     "ExponentialMapValidity",
     "ManifoldConstraint",
     "DescentProperty",
+    "ParallelTransportIsometry",
     "MergeClosure",
     "CancellationClosure",
     "UnitaryEquivalence",
@@ -301,6 +302,23 @@ class DescentProperty(Invariant):
             ok=ok,
             max_error=max(0.0, f_after - f_before),
             details=f"f: {f_before:.6e} -> {f_after:.6e}" if not ok else "",
+        )
+
+
+class ParallelTransportIsometry(Invariant):
+    """geodesic.parallel_transport: transport is an isometry of the metric
+    — g_{point_to}(V', V') = g_{point_from}(V, V) to machine precision."""
+
+    name = "parallel_transport_isometry"
+
+    def check(self, result, manifold, point_from, point_to, vector, **kwargs) -> VerificationReport:
+        g0 = manifold.metric_norm_sq(point_from, vector)
+        g1 = manifold.metric_norm_sq(point_to, result)
+        err = abs(g1 - g0)
+        return VerificationReport(
+            ok=err < self.atol,
+            max_error=err,
+            details=f"transport metric drift {err:.2e}",
         )
 
 

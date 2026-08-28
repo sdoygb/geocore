@@ -69,6 +69,12 @@ class RiemannianManifold(GeometricObject):
     def in_chart(self, point) -> bool:
         raise NotImplementedError
 
+    def parallel_transport(self, point_from, point_to, vector):
+        """Parallel transport of a tangent vector from point_from to
+        point_to along the connecting geodesic — an isometry (metric norm
+        preserved)."""
+        raise NotImplementedError
+
     def geodesic_ode(self, state):
         raise NotImplementedError
 
@@ -136,6 +142,29 @@ class PolarPlane(RiemannianManifold):
         v_r_t = vx * np.cos(y) + vy * np.sin(y)
         v_y_t = (-vx * np.sin(y) + vy * np.cos(y)) / r
         return GeodesicSolution([r, y], [v_r_t, v_y_t])
+
+    def parallel_transport(self, point_from, point_to, vector):
+        """Parallel transport along the straight-line geodesic.
+
+        The plane is flat, so in Cartesian coordinates transport is the
+        identity; the polar coordinate frame rotates and scales along the
+        way.  From (r0, y0) to (r1, y1) with d = y1 - y0:
+
+            v_r'  = cos(d) v_r + sin(d) r0 v_y
+            v_y'  = (-sin(d) v_r + cos(d) r0 v_y) / r1
+
+        (an isometry of g = diag(1, r^2); exact up to floating point).
+        """
+        r0, y0 = float(point_from[0]), float(point_from[1])
+        r1, y1 = float(point_to[0]), float(point_to[1])
+        v = np.asarray(vector, dtype=float)
+        cos_d, sin_d = np.cos(y1 - y0), np.sin(y1 - y0)
+        return np.array(
+            [
+                cos_d * v[0] + sin_d * r0 * v[1],
+                (-sin_d * v[0] + cos_d * r0 * v[1]) / r1,
+            ]
+        )
 
     def __repr__(self):
         return "PolarPlane(ds^2 = dr^2 + r^2 dy^2)"

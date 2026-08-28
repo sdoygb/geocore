@@ -59,7 +59,7 @@ class HyperbolicPlane(RiemannianManifold):
         c = x0 + y0 * v_y / v_x
         R = np.sqrt((x0 - c) ** 2 + y0 * y0)
         alpha = v_x * R / (y0 * y0)
-        beta = np.arctanh((x0 - c) / R)
+        beta = np.arctanh(np.clip((x0 - c) / R, -1.0 + 1e-15, 1.0 - 1e-15))
         s = alpha * t + beta
         sech_s = 1.0 / np.cosh(s)
         x_t = c + R * np.tanh(s)
@@ -67,6 +67,36 @@ class HyperbolicPlane(RiemannianManifold):
         v_x_t = R * alpha * sech_s * sech_s
         v_y_t = -R * alpha * sech_s * np.tanh(s)
         return GeodesicSolution([x_t, y_t], [v_x_t, v_y_t])
+
+    def parallel_transport(self, point_from, point_to, vector):
+        """Parallel transport along the connecting geodesic (semicircle).
+
+        Along the geodesic circle of center (c, 0), the transport of a
+        tangent vector is a rotation by the swept angle dθ combined with a
+        scaling sin θ_t / sin θ_0 = y_t / y_0:
+
+            V' = (y_t / y_0) R(dθ) V
+
+        (derived from the Christoffel equations; exact up to floating
+        point).  For vertical geodesics (x constant) the circle degenerates
+        and the transport is a pure scaling V' = (y_t / y_0) V.
+        """
+        x0, y0 = float(point_from[0]), float(point_from[1])
+        xt, yt = float(point_to[0]), float(point_to[1])
+        v = np.asarray(vector, dtype=float)
+        if abs(x0 - xt) < 1e-15 and abs(y0 - yt) < 1e-15:
+            return v.copy()
+        scale = yt / y0
+        if abs(x0 - xt) < 1e-15:
+            return scale * v  # vertical geodesic: pure scaling
+        c = (x0 * x0 + y0 * y0 - xt * xt - yt * yt) / (2.0 * (x0 - xt))
+        th0 = np.arctan2(y0, x0 - c)
+        th_t = np.arctan2(yt, xt - c)
+        dth = (th_t - th0 + np.pi) % (2.0 * np.pi) - np.pi  # wrap to (-pi, pi]
+        cos_d, sin_d = np.cos(dth), np.sin(dth)
+        return scale * np.array(
+            [cos_d * v[0] - sin_d * v[1], sin_d * v[0] + cos_d * v[1]]
+        )
 
     def __repr__(self):
         return "HyperbolicPlane(ds^2 = (dx^2 + dy^2) / y^2)"

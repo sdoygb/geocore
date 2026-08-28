@@ -303,6 +303,7 @@ from .invariants import (  # noqa: E402
     DescentProperty,
     ExponentialMapValidity,
     ManifoldConstraint,
+    ParallelTransportIsometry,
     RieszGradientValidity,
 )
 
@@ -342,3 +343,22 @@ def _(manifold, point, descent_vector, lr, **kwargs):
     return manifold.geodesic_generic(
         point, lr * np.asarray(descent_vector, dtype=float), 1.0
     ).point
+
+
+geodesic_parallel_transport = op(
+    "geodesic.parallel_transport",
+    invariants=[ParallelTransportIsometry()],
+    theorem=(
+        "Parallel transport of a tangent vector along the connecting "
+        "geodesic is an isometry: g_{to}(V', V') = g_{from}(V, V).  On the "
+        "sphere it is a rotation about the great-circle axis; on the "
+        "hyperbolic plane a rotation plus scaling; on the flat polar plane "
+        "the identity.  This is what carries optimizer moment buffers "
+        "between tangent spaces (Riemannian Adam)."
+    ),
+)
+
+
+@geodesic_parallel_transport.register_default
+def _(manifold, point_from, point_to, vector, **kwargs):
+    return manifold.parallel_transport(point_from, point_to, vector)
