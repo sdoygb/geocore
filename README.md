@@ -78,8 +78,10 @@ print(shortcuts.registry.benchmark("rotation.closed_form", r, s))
 
 See [`examples/geocore_demo.ipynb`](examples/geocore_demo.ipynb) for an
 executed walkthrough of all 12 features (regenerate with
-`PYTHONPATH=src python3 examples/build_demo.py`), and
-[`docs/user-guide.md`](docs/user-guide.md) for the full user guide.
+`PYTHONPATH=src python3 examples/build_demo.py`),
+[`docs/user-guide.md`](docs/user-guide.md) for the full user guide, and
+[`docs/retrospective.md`](docs/retrospective.md) for the honest project
+retrospective (17 features, measured findings, bugs caught, conclusions).
 
 ## First measured result (n = 10 qubits)
 
