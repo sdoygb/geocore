@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 255 tests
+└── tests/                   # 262 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -815,6 +815,31 @@ handle on the plateau; NOT a universal cure (guided params still decay
 on the global cost, only slower).  During development a sign bug in
 the diagonal derivative was caught by the gradient verification.
 
+### Quantum: discrete dynamic evolution vs plateaus (`examples/vqe_discrete_evolution.py`)
+
+The "evolve, don't optimize" route — the geometric answer that the
+plateau never enters because there is no gradient.  With a FIXED
+adiabatic schedule (γₖ=Δt·sₖ, βₖ=Δt·(2sₖ−1), the QAOA circuit
+structure) there are **zero parameters and zero gradients**, so the
+barren plateau (a disease of continuous parameterization) is absent by
+construction.  Machine-verified (Ising ground state):
+
+```
+[1] Fidelity to the exact ground state (p = Trotter steps, T = time):
+      n= 4: 0.993   n= 6: 0.989   n= 8: 0.984   n=10: 0.978
+      (p = 2000-4000, T = 200-400; cost O(p·2^n), p polynomial)
+[2] Energy error vs exact (p=4000): +0.026 (n=4) .. +0.081 (n=10)
+[3] Contrast: continuous-gradient HEA VQE — gradient RMS 2.2e-3 (n=8),
+      1.5e-4 (n=10), 3.5e-5 (n=12) — barren and stuck
+```
+
+Honest framing: the adiabatic/quantum-simulation route (leaves the
+variational framework, no variational-advantage claim); T ~ 1/gap²
+grows polynomially with n (not the exponential of the plateau);
+convergence plateaus at ~0.98 (adiabatic/Trotter residual).  What it
+demonstrates: the plateau is a disease of continuous parameterization —
+discrete dynamic evolution does not enter that framework at all.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -1085,14 +1110,19 @@ Done so far — each with machine-precision verification + measured benchmark:
     mixed ansatz converges better/stabler (median 0.743 vs 0.670).
     Geometric answer: the plateau is structural for the random
     parameterization, not the guided part.
+39. ✅ Quantum: discrete dynamic evolution vs plateaus — the "evolve,
+    don't optimize" route: fixed adiabatic schedule (zero parameters,
+    zero gradients) converges to the Ising ground state (fidelity
+    0.993/0.989/0.984/0.978 at n=4/6/8/10) while the continuous-
+    gradient HEA is barren and stuck (gradient 3.5e-5 at n=12).
+    The plateau never enters because there is no gradient.
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,
   with the intermediate regimes (mixed coherent + depolarizing).
 - QAOA parameter transfer: train on small n, apply to large n
   (transferability measured, since concentration is family-dependent).
-- Spectrum-guided ansatz on a real molecule (pyscf LiH) — the
-  "rebuild the landscape" lever beyond the Ising toy.
+- T(n) adiabatic scaling law for the discrete evolution solver.
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
