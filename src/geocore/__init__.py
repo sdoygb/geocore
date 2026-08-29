@@ -16,6 +16,7 @@ from .sphere import Sphere  # noqa: F401
 from .objects import Pauli, Rotation  # noqa: F401
 from .ops import dispatch, get_op, op  # noqa: F401
 from .optim import RiemannianAdam, RiemannianSGD, BatchOptimizationResult, OptimizationResult, minimize, minimize_batch  # noqa: F401
+from .geostats import frechet_mean, frechet_variance, principal_directions, tangent_covariance  # noqa: F401
 from .rotations import optimize_pauli_rotations  # noqa: F401
 
 __all__ = [
@@ -46,6 +47,10 @@ __all__ = [
     "BatchOptimizationResult",
     "minimize",
     "minimize_batch",
+    "frechet_mean",
+    "frechet_variance",
+    "principal_directions",
+    "tangent_covariance",
     "dispatch",
     "get_op",
     "op",

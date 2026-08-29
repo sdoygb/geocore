@@ -76,8 +76,10 @@ print(report)              # machine-precision check vs the generic path
 print(shortcuts.registry.benchmark("rotation.closed_form", r, s))
 ```
 
-See [`examples/geocore_demo.ipynb`](examples/geocore_demo.ipynb) for a
-walkthrough of all four layers.
+See [`examples/geocore_demo.ipynb`](examples/geocore_demo.ipynb) for an
+executed walkthrough of all 12 features (regenerate with
+`PYTHONPATH=src python3 examples/build_demo.py`), and
+[`docs/user-guide.md`](docs/user-guide.md) for the full user guide.
 
 ## First measured result (n = 10 qubits)
 
