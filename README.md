@@ -539,6 +539,29 @@ significant (p ~ 0.6) — the case counts concentrate in populous E Asia,
 so that test design is insensitive; we report it rather than over-claim.
 Consistent with the well-known "Cantonese cancer" epidemiology.
 
+### Quantum: H2 VQE (`examples/vqe_h2.py`)
+
+The variational quantum eigensolver — the near-term quantum-chemistry
+scenario — on the H2 STO-3G two-qubit Hamiltonian (the Qiskit-tutorial
+Pauli form), with the geocore machinery doing all the work:
+
+```
+Hamiltonian: -1.052 II + 0.398 IZ - 0.398 ZI - 0.011 ZZ + 0.181 XX
+exact ground state (diagonalization): -1.857275 Ha
+VQE (numeric gradient)   : -1.857275 Ha  (error 5e-10)
+VQE (analytic gradient)  : -1.857275 Ha  (error 5e-10,
+                            analytic grad verified vs FD: 8.9e-10)
+```
+
+The ansatz is a 5-parameter RY-RY-RZZ-RY-RY circuit; the energy
+expectation uses the exact O(2ⁿ) Pauli action; the optimizer is
+RiemannianAdam on EuclideanSpace(5); the analytic gradient is the
+rotation-derivative closed form, auto-verified against finite
+differences.  The verification diagnosed two real issues: the pure
+RY+CNOT hardware-efficient ansatz is inexpressible for this ground
+state (stuck 0.02 Ha above), and my hand-written analytic gradient had
+a gate-slot bug (caught by the gradient verification).
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -759,9 +782,13 @@ Done so far — each with machine-precision verification + measured benchmark:
 29. ✅ NPC geographic association (GLOBOCAN 2020): 20-30x ASIR
     regional contrast; incidence does not track population (perm. p
     0.44); honest about the insensitive center-of-mass test.
+30. ✅ Quantum: H2 VQE — the near-term quantum-chemistry scenario,
+    converged to the exact ground state (error 5e-10, chemical
+    accuracy 1.6e-3); analytic gradient verified; ansatz
+    expressibility diagnosed.
 
 Next candidates (hypotheses to measure, not claims):
-- Intensity/lifecycle modeling (the honest gap the comparison exposed).
+- QAOA (MaxCut) — combinatorial optimization on the same pipeline.
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
