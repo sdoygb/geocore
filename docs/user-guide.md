@@ -104,6 +104,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 15 | Property (fuzz) tests | — | ~700 random cases, all invariants | — |
 | 16 | Real-data application (USGS 2024 seismicity) | — | centroids/PCA reproduce geography; naive ±180° error exposed | — |
 | 17 | Circuit object (gates + optimize) | — | unitary equivalence to 1e-9 | — |
+| 18 | Real circular data (wind, 3 cities) | — | circular mean matches climate; arithmetic up to 183° off | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -141,6 +142,6 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 17 features, 155 tests (incl. ~700 fuzz cases + real-data tests),
-12 measured shortcuts (see catalog).  Next candidates: project
-retrospective / summary document.
+Done: 18 features, 159 tests (incl. ~700 fuzz cases + real-data tests on
+seismicity and wind), 12 measured shortcuts (see catalog).  Next
+candidates: documentation hosting.

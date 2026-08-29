@@ -38,6 +38,7 @@ Architected with PyTorch as the structural reference, layer by layer:
 | 15 | Property (fuzz) tests | — | ~700 random cases, all invariants | — |
 | 16 | Real-data application (USGS 2024) | — | centroids/PCA reproduce geography | — |
 | 17 | Circuit object + optimizer | — | unitary equivalence to 1e-9 | — |
+| 18 | Real circular data (wind, 3 cities) | — | circular mean matches climate; arithmetic 183° off | — |
 
 Every shortcut is verified against its generic path (closed form vs
 expm / RK4 / eigensolve / simulation / finite differences) and every
@@ -94,6 +95,7 @@ vs finite difference) is a bug trap.  Real bugs it caught:
 | π/2 piece fold order (pre-existing, untested) | rotations | circuit optimize verification |
 | S gate leaks e^{iπ/4} global phase | circuit | exact unitary equivalence |
 | Naive (lat, lon) average wrong across ±180° | real data | Tonga events → 179.7°E vs −69.5° |
+| Arithmetic mean wrong for circular (wind) data | real data | up to 183° off; geometric matches climate |
 
 None of these were found by reading code — all by running the
 verification against an independent path.

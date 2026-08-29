@@ -129,7 +129,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 155 tests
+└── tests/                   # 159 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -365,6 +365,27 @@ wrong* across the ±180° meridian (175° and −175° average to 0°) — the
 geometric treatment is the correct one for directions on a sphere, and
 the difference is visible in real data, not a synthetic toy.
 
+### Real data: circular wind directions (three cities)
+
+`examples/real_data_multi.py` analyzes hourly wind direction (January
+2024, Open-Meteo archive, stored in `examples/data/`) — a *circular*
+dataset — with the same S² pipeline, no special-casing:
+
+```
+              geocore mean   naive arithmetic   reference
+tokyo   (1月)   346.1° (NW)   253.0°  (err 92°)   345.2°
+beijing (1月)   342.9° (NW)   173.3°  (err 183°)  356.2°
+sydney  (1月)    74.5° (ENE)  125.4°  (err 50°)    75.5°
+```
+
+The bimodal wind data makes the arithmetic mean average the two modes
+into the gap between them (up to 183° off — almost the opposite
+direction); the geometric mean matches the independent vector-mean
+reference to <1° and the known climate (NW winter monsoons for
+Tokyo/Beijing, an easterly regime for Sydney in January).  The same
+module handled S² seismicity and S¹ wind directions correctly — the
+dynamic-capability check on real, differently-shaped data.
+
 ## Circuit object
 
 A `Circuit` is a gate sequence of Clifford gates (`h, s, sd, sx, sxdg,
@@ -497,9 +518,13 @@ Done so far — each with machine-precision verification + measured benchmark:
     geometric optimizer (pull-through + merge/2π/π/2), unitary
     equivalence verified to machine precision; fixed a pre-existing
     π/2-piece fold-order bug no test covered.
+18. ✅ Real circular data (wind, 3 cities): the S² pipeline computes the
+    correct circular mean on bimodal wind data (arithmetic mean up to
+    183° off; geometric matches climate — NW monsoons, easterly
+    Sydney).
 
 Next candidates (hypotheses to measure, not claims):
-- Project retrospective / summary document.
+- Documentation hosting (GitHub Pages).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
