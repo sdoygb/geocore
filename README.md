@@ -127,7 +127,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 145 tests
+└── tests/                   # 155 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -363,6 +363,32 @@ wrong* across the ±180° meridian (175° and −175° average to 0°) — the
 geometric treatment is the correct one for directions on a sphere, and
 the difference is visible in real data, not a synthetic toy.
 
+## Circuit object
+
+A `Circuit` is a gate sequence of Clifford gates (`h, s, sd, sx, sxdg,
+cx`) and Pauli rotations `R_P(θ)`, with `to_matrix`, `apply_to_state`
+(closed-form rotations, O(2ⁿ)) and `optimize`:
+
+```python
+from geocore import Circuit
+
+c = Circuit([("h", 0), ("r", "XI", 0.4), ("cx", 0, 1), ("r", "YY", 0.6)])
+opt, cliff = c.optimize()   # Clifford pulled through, rotations merged
+# U(input) == U(clifford) @ U(optimized), verified to 1e-9 automatically
+```
+
+The optimizer pulls Clifford gates through the rotations
+(`C R_P(θ) = R_{C†PC}(θ) C`, an exact identity), reduces the rotation
+chain to its fixed point (merge / 2π cancel / π/2 absorption), and
+verifies unitary equivalence to machine precision (a failure raises).
+Verified: 40 random 2-qubit + 15 random 3-qubit mixed circuits all
+unitary-equivalent after optimization; the textbook 5→3 reduction; the
+π/2 absorption is exact (the absorbed piece stays an exact Clifford
+rotation — expressing it with S gates would leak S's e^{iπ/4} global
+phase, a real subtlety caught by the verification).  Fixing the
+optimizer exposed a pre-existing bug in the π/2 piece construction
+(fold order) that no test had covered.
+
 ## Clifford group elements (L0 extension)
 
 A `Clifford` object on n qubits: the symplectic tableau (2n×2n binary
@@ -465,9 +491,13 @@ Done so far — each with machine-precision verification + measured benchmark:
     the S² centroid/PCA reproduce verifiable geography (Japan centroid,
     Tonga belt strike), and expose the naive (lat, lon) average's real
     ±180° error.
+17. ✅ Circuit object: Clifford gates + Pauli rotations with the
+    geometric optimizer (pull-through + merge/2π/π/2), unitary
+    equivalence verified to machine precision; fixed a pre-existing
+    π/2-piece fold-order bug no test covered.
 
 Next candidates (hypotheses to measure, not claims):
-- Circuit object (gate-list wrapper with optimize + verification).
+- Project retrospective / summary document.
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.

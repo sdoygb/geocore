@@ -77,7 +77,14 @@ def _simplify_angle(theta: float) -> tuple[float, int]:
 
 
 def _pi2_piece(axis: str, k: int):
-    """Clifford circuit implementing R_axis(k*pi/2) (basis change, fold, S^k, undo)."""
+    """Clifford circuit implementing R_axis(k*pi/2).
+
+    R_P(pi/2) = (prod C_q)^+ . fold . S_target . fold^+ . (prod C_q),
+    where C_q maps the per-qubit factor to Z (X -> H, Y -> SX), the fold
+    C = CX(q_k,0)...CX(q_1,0) satisfies C . S_target . C^+ = R_{prod Z_q}
+    (the target's Z picks up every control), and each dagger is the
+    reversed gate sequence (CX is self-inverse, but order matters).
+    """
     support = [i for i, c in enumerate(axis) if c != "I"]
     if not support:
         return []
@@ -89,13 +96,14 @@ def _pi2_piece(axis: str, k: int):
         elif c == "Y":
             gates.append(("sx", (q,)))
     target = support[0]
-    for q in support[1:]:
+    others = support[1:]
+    for q in reversed(others):  # fold^+ : reversed C
         gates.append(("cx", (q, target)))
     for _ in range(k % 4):
         gates.append(("s", (target,)))
-    for q in support[1:]:
+    for q in others:  # fold : C
         gates.append(("cx", (q, target)))
-    for q in support:
+    for q in reversed(support):  # (prod C_q)^+ : reversed, daggers
         c = axis[q]
         if c == "X":
             gates.append(("h", (q,)))
