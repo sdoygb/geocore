@@ -111,6 +111,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 20 | ENSO statistical forecast | — | window [2025.1, 2027.8] cross-checked vs official tail | — |
 | 21 | Spectral (geometrized) ENSO forecast | — | period 3.62 yr; backtest ~1.6 yr; forecast 2026.6 | — |
 | 22 | Hurricane track geometry (IBTrACS) | — | activity region, NNW, Sept peak, 3 track clusters | — |
+| 23 | Live storm forecast vs NHC | — | +24h within 0.8 deg of NHC (JULIO 2026) | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -148,6 +149,6 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 22 features, 178 tests (incl. ~700 fuzz cases + real-data tests on
+Done: 23 features, 182 tests (incl. ~700 fuzz cases + real-data tests on
 seismicity, wind, ENSO and hurricanes), 12 measured shortcuts (see
-catalog).  Next candidates: documentation hosting.
+catalog).

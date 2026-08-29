@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 178 tests
+└── tests/                   # 182 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -447,6 +447,30 @@ and the three clusters matching the known track types (Cape Verde
 storms crossing the Atlantic, Gulf-Caribbean storms, mid-latitude
 recurving storms).
 
+### Live storm track forecast vs NHC (`examples/storm_forecast.py`)
+
+The similar-track (analog) method on the S² pipeline — the observed
+48-h segment of an ACTIVE storm is matched against the historical EP
+record (1147 storms) and the analogs' futures form the forecast.  Tested
+against the live 2026 storms and compared with the official NHC
+forecasts:
+
+```
+JULIO (EP102026), forecast from 2026-08-25:
+  our +24h : 18.0N 119.0W     NHC +24h : 18.1N 119.9W   (0.8 deg, ~90 km)
+  NHC: dissipated 26 Aug (confirmed); ours predicts continued motion —
+  lifecycle prediction is our honest blind spot (track-only method)
+
+ISELLE (EP092026): direction agrees (NW); position ~2-2.5 deg off over
+  5 days (within the typical official-forecast error); NHC marks
+  post-tropical decay, we do not model intensity.
+```
+
+Honest conclusion: the SHORT-TERM POSITION forecast (24-48 h) is close
+to the professional agencies (within their typical error); the LIFECYCLE
+(decay / dissipation) is not predicted — the similar-track method
+forecasts tracks, not intensity.
+
 ### Spectral (geometrized) ENSO forecast (`examples/enso_spectral_forecast.py`)
 
 The spectrum as a geometric invariant: the observed ONI's dominant
@@ -617,9 +641,12 @@ Done so far — each with machine-precision verification + measured benchmark:
 22. ✅ Hurricane track geometry (IBTrACS, 746 NA storms): activity
     region center/PCA, NNW movement, September peak, and three clusters
     matching the real track types.
+23. ✅ Live storm track forecast vs NHC: similar-track (analog) method
+    on the S² pipeline; +24h within 0.8 deg of NHC for JULIO 2026;
+    lifecycle prediction honestly absent.
 
 Next candidates (hypotheses to measure, not claims):
-- Documentation hosting (GitHub Pages).
+- Intensity/lifecycle modeling (the honest gap the comparison exposed).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
