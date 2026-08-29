@@ -300,6 +300,7 @@ def _(theta, n):
 # ---------------------------------------------------------------------------
 
 from .invariants import (  # noqa: E402
+    BatchConsistency,
     DescentProperty,
     ExponentialMapValidity,
     ManifoldConstraint,
@@ -362,3 +363,28 @@ geodesic_parallel_transport = op(
 @geodesic_parallel_transport.register_default
 def _(manifold, point_from, point_to, vector, **kwargs):
     return manifold.parallel_transport(point_from, point_to, vector)
+
+
+geodesic_batch = op(
+    "geodesic.batch",
+    invariants=[BatchConsistency()],
+    theorem=(
+        "Batch geodesics: initial/velocity/t over a batch (B, 2)/(B,), "
+        "returning points (B, 2).  The registered implementation is the "
+        "per-point generic path (the analogue of a Python-level vmap loop); "
+        "the vectorized closed form is a Layer-3 shortcut."
+    ),
+)
+
+
+@geodesic_batch.register_default
+def _(manifold, initial, velocity, t, **kwargs):
+    init = np.atleast_2d(np.asarray(initial, dtype=float))
+    vel = np.atleast_2d(np.asarray(velocity, dtype=float))
+    B = init.shape[0]
+    tt = np.broadcast_to(np.asarray(t, dtype=float), (B,))
+    pts = np.empty_like(init)
+    for i in range(B):
+        sol = manifold.geodesic_generic(init[i], vel[i], float(tt[i]))
+        pts[i] = sol.point
+    return pts

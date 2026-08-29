@@ -27,7 +27,7 @@ import numpy as np
 
 from .objects import GeometricObject
 
-__all__ = ["RiemannianSGD", "RiemannianAdam", "minimize", "OptimizationResult"]
+__all__ = ["RiemannianSGD", "RiemannianAdam", "minimize", "minimize_batch", "OptimizationResult", "BatchOptimizationResult"]
 
 
 @dataclasses.dataclass
@@ -200,6 +200,93 @@ class RiemannianAdam(GeometricObject):
     def __repr__(self):
         b1, b2 = self.betas
         return f"RiemannianAdam(lr={self.lr}, betas=({b1}, {b2}))"
+
+
+@dataclasses.dataclass
+class BatchOptimizationResult:
+    """The measured outcome of a batched optimization run: one trajectory
+    per starting point, vectorized."""
+
+    points: np.ndarray  # (B, 2)
+    f_final: np.ndarray  # (B,)
+    converged: np.ndarray  # (B,)
+    minimizer_error: np.ndarray | None = None  # (B,) when minimizer given
+    n_steps: int = 0
+    descent_ok: bool = True
+
+    def __repr__(self):
+        conv = int(self.converged.sum()) if self.converged.ndim else int(self.converged)
+        return (
+            f"BatchOptimizationResult(B={len(self.points)}, "
+            f"converged={conv}/{len(self.points)}, "
+            f"descent_ok={self.descent_ok}, n_steps={self.n_steps})"
+        )
+
+
+def _central_difference_vec(f, points, eps=1e-6):
+    """Vectorized central-difference covector df over a batch: f must
+    accept (B, 2) and return (B,)."""
+    p = np.atleast_2d(np.asarray(points, dtype=float))
+    d0 = (f(p + np.array([eps, 0.0])) - f(p - np.array([eps, 0.0]))) / (2 * eps)
+    d1 = (f(p + np.array([0.0, eps])) - f(p - np.array([0.0, eps]))) / (2 * eps)
+    return np.column_stack([np.asarray(d0, dtype=float), np.asarray(d1, dtype=float)])
+
+
+def minimize_batch(
+    manifold,
+    f,
+    p0,
+    lr: float = 0.1,
+    n_steps: int = 200,
+    atol: float = 1e-6,
+    minimizer=None,
+) -> BatchOptimizationResult:
+    """Vectorized Riemannian gradient descent over a batch of starting
+    points (the analogue of a batched optimizer step in torch).
+
+    ``f`` must accept (B, 2) and return (B,); ``p0`` is (B, 2).  Each
+    point follows its own gradient flow; the exponential-map steps and the
+    gradient (Riesz representative) are computed with vectorized numpy ops
+    (the batch core path).  The result is verified to agree with the
+    per-point loop in tests; a step leaving the chart raises a clear error.
+    """
+    from .invariants import VerificationError
+
+    points = np.atleast_2d(np.asarray(p0, dtype=float))
+    B = points.shape[0]
+    descent_ok = True
+    for _ in range(n_steps):
+        df = _central_difference_vec(f, points)
+        g0, g1 = manifold.metric_diag(points)
+        grad = np.column_stack([df[:, 0] / np.asarray(g0), df[:, 1] / np.asarray(g1)])
+        new_points, _ = manifold.geodesic_closed_form_batch(points, -lr * grad, 1.0)
+        if not bool(np.all(manifold.in_chart(new_points))):
+            raise VerificationError(
+                f"minimize_batch step left the manifold chart "
+                f"({np.round(new_points, 4)}); reduce lr"
+            )
+        if bool(np.any(np.asarray(f(new_points)) > np.asarray(f(points)) + 1e-7)):
+            descent_ok = False
+        points = new_points
+    df_final = _central_difference_vec(f, points)
+    g0, g1 = manifold.metric_diag(points)
+    grad_final = np.column_stack([df_final[:, 0] / np.asarray(g0), df_final[:, 1] / np.asarray(g1)])
+    g_norm = manifold.metric_norm_sq(points, grad_final)
+    converged = np.sqrt(np.asarray(g_norm)) < atol
+    minimizer_error = None
+    if minimizer is not None:
+        minimizer_error = np.linalg.norm(
+            points - np.broadcast_to(np.asarray(minimizer, dtype=float), points.shape),
+            axis=1,
+        )
+    return BatchOptimizationResult(
+        points=points,
+        f_final=np.asarray(f(points), dtype=float),
+        converged=converged,
+        minimizer_error=minimizer_error,
+        n_steps=n_steps,
+        descent_ok=descent_ok,
+    )
 
 
 def minimize(

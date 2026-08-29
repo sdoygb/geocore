@@ -136,6 +136,7 @@ Key operators in v0.1:
 | `optim.gradient` | (Manifold, df, p) | Riesz duality g(grad f, v) = df(v) |
 | `optim.step` | (Manifold, p, v, lr) | exp-map validity, in-chart, descent |
 | `geodesic.parallel_transport` | (Manifold, p, q, V) | isometry: g_q(V',V') = g_p(V,V) |
+| `geodesic.batch` | (Manifold, P, V, t) | batch == vectorized RK4 (machine precision) |
 
 ## Layer 2 — Automatic verification (≈ `autograd`)
 
@@ -220,6 +221,7 @@ First candidate shortcuts (to be measured, not assumed):
 | Closed-form geodesics (warped-product / sphere-like) | numeric ODE integration | orders of magnitude (no ODE) |
 | Spectral shortcuts (Laplacian eigenvalues, θ^{d+1} scaling) | full simulation / Monte Carlo | orders of magnitude (prediction vs simulation) |
 | Closed-form exponential-map optimizer step | RK4 geodesic integration per step | orders of magnitude (no ODE per step) |
+| Vectorized batch geodesics (closed form) | per-point loop (vmap analogue) | orders of magnitude (no Python loop) |
 
 ## v0.1 → target mapping
 

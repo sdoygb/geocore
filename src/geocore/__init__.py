@@ -15,7 +15,7 @@ from .spectral import Circle  # noqa: F401
 from .sphere import Sphere  # noqa: F401
 from .objects import Pauli, Rotation  # noqa: F401
 from .ops import dispatch, get_op, op  # noqa: F401
-from .optim import RiemannianAdam, RiemannianSGD, OptimizationResult, minimize  # noqa: F401
+from .optim import RiemannianAdam, RiemannianSGD, BatchOptimizationResult, OptimizationResult, minimize, minimize_batch  # noqa: F401
 from .rotations import optimize_pauli_rotations  # noqa: F401
 
 __all__ = [
@@ -41,7 +41,9 @@ __all__ = [
     "RiemannianSGD",
     "RiemannianAdam",
     "OptimizationResult",
+    "BatchOptimizationResult",
     "minimize",
+    "minimize_batch",
     "dispatch",
     "get_op",
     "op",

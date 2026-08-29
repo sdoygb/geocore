@@ -61,10 +61,11 @@ class RiemannianManifold(GeometricObject):
 
     def metric_norm_sq(self, point, velocity) -> float:
         """g(w, w) = g0 w1^2 + g1 w2^2 — the conserved quantity along
-        geodesics (a Levi-Civita invariant)."""
+        geodesics (a Levi-Civita invariant).  Accepts single (2,) or
+        batched (B, 2) inputs."""
         g0, g1 = self.metric_diag(np.asarray(point, dtype=float))
-        v1, v2 = np.asarray(velocity, dtype=float)
-        return float(g0 * v1 * v1 + g1 * v2 * v2)
+        v = np.asarray(velocity, dtype=float)
+        return g0 * v[..., 0] * v[..., 0] + g1 * v[..., 1] * v[..., 1]
 
     def in_chart(self, point) -> bool:
         raise NotImplementedError
@@ -92,6 +93,37 @@ class RiemannianManifold(GeometricObject):
             state = state + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
         return GeodesicSolution(state[:2], state[2:])
 
+    def geodesic_generic_batch(self, initial, velocity, t, n_steps=200):
+        """Vectorized RK4 over a batch of geodesics — the batch generic
+        path (the analogue of vectorized/batched tensor ops).
+
+        ``initial``/``velocity`` are (B, 2); ``t`` is a scalar or (B,).
+        Returns (points (B, 2), velocities (B, 2)).  The geodesic ODE is
+        already elementwise, so the same RK4 loop runs on (B, 4) states.
+        """
+        initial = np.atleast_2d(np.asarray(initial, dtype=float))
+        velocity = np.atleast_2d(np.asarray(velocity, dtype=float))
+        B = initial.shape[0]
+        t = np.broadcast_to(np.asarray(t, dtype=float), (B,))
+        dt = t / n_steps
+        state = np.column_stack([initial, velocity])  # (B, 4)
+        for _ in range(n_steps):
+            k1 = self.geodesic_ode(state)
+            k2 = self.geodesic_ode(state + dt[:, None] / 2 * k1)
+            k3 = self.geodesic_ode(state + dt[:, None] / 2 * k2)
+            k4 = self.geodesic_ode(state + dt[:, None] * k3)
+            state = state + dt[:, None] / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        return state[:, :2], state[:, 2:]
+
+    def geodesic_closed_form_batch(self, initial, velocity, t):
+        """Vectorized closed-form geodesics over a batch: (points (B, 2),
+        velocities (B, 2)).  The Layer-3 shortcut for batch workloads."""
+        raise NotImplementedError
+
+    def parallel_transport_batch(self, point_from, point_to, vector):
+        """Vectorized parallel transport over a batch (B, 2) each."""
+        raise NotImplementedError
+
     def geodesic_closed_form(self, initial, velocity, t):
         raise NotImplementedError
 
@@ -112,16 +144,19 @@ class PolarPlane(RiemannianManifold):
     """
 
     def metric_diag(self, point) -> tuple[float, float]:
-        r = float(point[0])
+        r = np.asarray(point, dtype=float)[..., 0]  # scalar or (B,)
         return (1.0, r * r)
 
     def in_chart(self, point) -> bool:
-        return float(point[0]) > 1e-12
+        return np.asarray(point, dtype=float)[..., 0] > 1e-12
 
     def geodesic_ode(self, state):
-        """state = (r, y, v_r, v_y) -> d/dt(state)."""
-        r, _y, v_r, v_y = state
-        return np.array([v_r, v_y, r * v_y * v_y, -2.0 * v_r * v_y / r])
+        """state = (r, y, v_r, v_y) -> d/dt(state).  ``[..., i]`` indexing
+        supports both a single (4,) state and a batched (B, 4) state."""
+        r, v_r, v_y = state[..., 0], state[..., 2], state[..., 3]
+        return np.stack(
+            [v_r, v_y, r * v_y * v_y, -2.0 * v_r * v_y / r], axis=-1
+        )
 
     def geodesic_closed_form(self, initial, velocity, t):
         """Closed form: a straight line in Cartesian coordinates.
@@ -165,6 +200,37 @@ class PolarPlane(RiemannianManifold):
                 (-sin_d * v[0] + cos_d * r0 * v[1]) / r1,
             ]
         )
+
+    def geodesic_closed_form_batch(self, initial, velocity, t):
+        """Vectorized straight-line geodesics over a batch (B, 2)."""
+        init = np.atleast_2d(np.asarray(initial, dtype=float))
+        vel = np.atleast_2d(np.asarray(velocity, dtype=float))
+        B = init.shape[0]
+        t = np.broadcast_to(np.asarray(t, dtype=float), (B,))
+        r0, y0 = init[:, 0], init[:, 1]
+        v_r, v_y = vel[:, 0], vel[:, 1]
+        x0, Y0 = r0 * np.cos(y0), r0 * np.sin(y0)
+        vx = v_r * np.cos(y0) - r0 * v_y * np.sin(y0)
+        vy = v_r * np.sin(y0) + r0 * v_y * np.cos(y0)
+        x = x0 + t * vx
+        Y = Y0 + t * vy
+        r = np.sqrt(x * x + Y * Y)
+        y = np.arctan2(Y, x)
+        v_r_t = vx * np.cos(y) + vy * np.sin(y)
+        v_y_t = (-vx * np.sin(y) + vy * np.cos(y)) / r
+        return np.column_stack([r, y]), np.column_stack([v_r_t, v_y_t])
+
+    def parallel_transport_batch(self, point_from, point_to, vector):
+        """Vectorized polar transport over a batch (B, 2) each."""
+        pf = np.atleast_2d(np.asarray(point_from, dtype=float))
+        pt = np.atleast_2d(np.asarray(point_to, dtype=float))
+        v = np.atleast_2d(np.asarray(vector, dtype=float))
+        cos_d = np.cos(pt[:, 1] - pf[:, 1])
+        sin_d = np.sin(pt[:, 1] - pf[:, 1])
+        out = np.empty_like(v)
+        out[:, 0] = cos_d * v[:, 0] + sin_d * pf[:, 0] * v[:, 1]
+        out[:, 1] = (-sin_d * v[:, 0] + cos_d * pf[:, 0] * v[:, 1]) / pt[:, 0]
+        return out
 
     def __repr__(self):
         return "PolarPlane(ds^2 = dr^2 + r^2 dy^2)"

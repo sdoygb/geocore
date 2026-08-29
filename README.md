@@ -124,7 +124,7 @@ geocore/
 │   ├── hyperbolic.py        # H²: upper half-plane, semicircle geodesics
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 71 tests
+└── tests/                   # 82 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -180,6 +180,28 @@ SO(3) rotation, hyperbolic = rotation + scaling, polar plane = coordinate
 rotation + scaling (the flat plane's transport is the identity only in
 Cartesian coordinates — the invariant caught this when tested).
 
+## Vectorized / batched core paths (≈ batched tensor ops / vmap)
+
+The batch analogues of the geodesic and transport ops: inputs (B, 2),
+outputs (B, 2), verified to equal the per-point paths to machine
+precision (the vectorized closed form vs the per-point loop; the
+vectorized RK4 vs the per-point RK4, exactly 0.0).  The batch closed-form
+shortcut (`geodesic.batch_closed_form`) is measured:
+
+| B | wall-time speedup | FLOPs speedup (analytic) |
+|---|---|---|
+| 10 | 1,581× | 30× |
+| 100 | 14,163× | 30× |
+| 500 | 46,290× | 30× |
+
+`minimize_batch` runs one gradient flow per starting point with
+vectorized steps (all points verified, chart-guarded), agreeing with the
+per-point `minimize` loop.  The batch verification caught a real bug: a
+refactor of `geodesic_ode` to batched indexing had swapped the velocity
+component for the position — the closed-form-vs-RK4 batch comparison
+flagged it immediately (both paths would otherwise have been wrong in
+the same way).
+
 ## Manifolds (all with closed-form geodesics, verified)
 
 | Manifold | Metric | Geodesic (closed form) | Verified truths |
@@ -224,9 +246,12 @@ Done so far — each with machine-precision verification + measured benchmark:
 7. ✅ RiemannianAdam (≈ torch.optim.Adam): adaptive steps + parallel
    transport of moment buffers (verified isometry, positivity-preserving
    via √v); converges on all three manifolds to ~1e-11.
+8. ✅ Vectorized/batched core paths (≈ vmap): batch geodesics (closed form
+   + RK4) and batch transport, verified identical to the per-point paths;
+   batch closed form measured 46,290× at B=500; `minimize_batch` agrees
+   with the per-point loop.
 
 Next candidates (hypotheses to measure, not claims):
-- Vectorized/batched core paths.
 - Application layers (QEC diagnostics, geometric statistics primitives).
 
 The theory is the engine, not the claim: what ships is standard math,

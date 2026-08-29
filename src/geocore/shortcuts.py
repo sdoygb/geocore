@@ -25,7 +25,7 @@ import numpy as np
 
 from .invariants import VerificationReport
 
-__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "geodesic_sphere_closed_form", "geodesic_hyperbolic_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction", "optim_step_closed_form"]
+__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "geodesic_sphere_closed_form", "geodesic_hyperbolic_closed_form", "geodesic_batch_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction", "optim_step_closed_form"]
 
 
 @dataclasses.dataclass
@@ -96,14 +96,22 @@ class Shortcut:
         """Run the replaced operator's registered implementation (baseline)."""
         return self.replaces(*args)
 
-    def verify_against(self, *args, atol=1e-9) -> VerificationReport:
+    def verify_against(self, *args, atol=1e-9, compare=None) -> VerificationReport:
         """Machine-precision check: shortcut result == generic result.
 
         Handles plain arrays and objects exposing ``point``/``velocity``
-        (e.g. geodesic solutions).
+        (e.g. geodesic solutions).  ``compare`` optionally replaces the
+        coordinate difference with a geometric comparison (needed for
+        periodic coordinates, e.g. the polar plane's angle): it receives
+        (generic_result, shortcut_result) and returns the max error.
         """
         generic_result = self.generic(*args)
         shortcut_result = self.impl(*args)
+        if compare is not None:
+            err = float(compare(generic_result, shortcut_result))
+            return VerificationReport(
+                ok=err < atol, max_error=err, details=f"compare error {err:.2e}"
+            )
         if hasattr(generic_result, "point") and hasattr(shortcut_result, "point"):
             err = max(
                 float(np.abs(np.asarray(generic_result.point) - np.asarray(shortcut_result.point)).max()),
@@ -365,5 +373,32 @@ geodesic_hyperbolic_closed_form = registry.register(
         impl=_geodesic_hyperbolic_closed,
         flops_generic=lambda n: 200 * 6,   # RK4: n_steps x ~6 ODE evals
         flops_shortcut=lambda n: 20,        # closed form: a handful of trig ops
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Seventh shortcut: vectorized closed-form batch geodesics (vs the
+# per-point generic loop).  The analogue of vectorized/batched tensor ops.
+# ---------------------------------------------------------------------------
+
+from .ops import geodesic_batch  # noqa: E402
+
+
+def _geodesic_batch_closed(manifold, initial, velocity, t):
+    return manifold.geodesic_closed_form_batch(initial, velocity, t)[0]
+
+
+def _batch_size(manifold, initial, velocity, t):
+    return np.atleast_2d(np.asarray(initial, dtype=float)).shape[0]
+
+
+geodesic_batch_closed_form = registry.register(
+    Shortcut(
+        name="geodesic.batch_closed_form",
+        replaces=geodesic_batch,
+        impl=_geodesic_batch_closed,
+        flops_generic=lambda B: B * 200 * 6,   # per-point RK4: B x ODE work
+        flops_shortcut=lambda B: B * 40,        # vectorized closed form
     )
 )

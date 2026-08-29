@@ -34,6 +34,7 @@ __all__ = [
     "ManifoldConstraint",
     "DescentProperty",
     "ParallelTransportIsometry",
+    "BatchConsistency",
     "MergeClosure",
     "CancellationClosure",
     "UnitaryEquivalence",
@@ -319,6 +320,27 @@ class ParallelTransportIsometry(Invariant):
             ok=err < self.atol,
             max_error=err,
             details=f"transport metric drift {err:.2e}",
+        )
+
+
+class BatchConsistency(Invariant):
+    """geodesic.batch: the per-point loop result equals the vectorized RK4
+    batch path (both are the generic ODE integration, so they must agree to
+    machine precision — this validates the vectorization itself)."""
+
+    name = "batch_consistency"
+
+    def check(self, result, manifold, initial, velocity, t, **kwargs) -> VerificationReport:
+        init = np.atleast_2d(np.asarray(initial, dtype=float))
+        vel = np.atleast_2d(np.asarray(velocity, dtype=float))
+        B = init.shape[0]
+        tt = np.broadcast_to(np.asarray(t, dtype=float), (B,))
+        pb, _ = manifold.geodesic_generic_batch(init, vel, tt)
+        worst = float(np.abs(np.asarray(result) - pb).max())
+        return VerificationReport(
+            ok=worst < 1e-9,
+            max_error=worst,
+            details=f"loop vs vectorized RK4 max error {worst:.2e}",
         )
 
 
