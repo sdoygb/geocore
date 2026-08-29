@@ -48,8 +48,9 @@ def test_trace_of_covariance_equals_variance():
     (because |log_m(p_i)|_g = d(m, p_i))."""
     for manifold, (lo, hi) in _MANIFOLDS:
         pts = rng.uniform(lo, hi, (30, 2))
-        var = frechet_variance(manifold, pts)
-        cov = tangent_covariance(manifold, pts)
+        m = frechet_mean(manifold, pts, lr=0.1, n_steps=300).point
+        var = frechet_variance(manifold, pts, mean=m)
+        cov = tangent_covariance(manifold, pts, mean=m)
         assert abs(np.trace(cov) - var) < 1e-9, type(manifold).__name__
 
 

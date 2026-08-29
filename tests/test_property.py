@@ -214,18 +214,20 @@ def test_fuzz_optimizer_arbitrary_quadratic():
 
 def test_fuzz_statistics_identities():
     """tr(Cov) = variance, mean fixed point, for random point sets on
-    every manifold."""
+    every manifold (both use the SAME mean — the identity is exact for a
+    fixed mean, avoiding independent-convergence noise)."""
     for manifold, (lo, hi), _ in _MANIFOLDS:
         for _ in range(15):
             pts = rng.uniform(lo, hi, (int(rng.integers(5, 40)), 2))
-            var = frechet_variance(manifold, pts)
-            cov = tangent_covariance(manifold, pts)
+            m = frechet_mean(manifold, pts, lr=0.1, n_steps=300).point
+            var = frechet_variance(manifold, pts, mean=m)
+            cov = tangent_covariance(manifold, pts, mean=m)
             assert abs(np.trace(cov) - var) < 1e-8, type(manifold).__name__
             assert np.linalg.eigvalsh(cov)[0] > -1e-9
             # single-point mean is the point itself
             p0 = pts[0]
-            m = frechet_mean(manifold, [p0, p0, p0], lr=0.1, n_steps=200).point
-            assert geodesic_distance(manifold, m, p0) < 1e-8
+            m2 = frechet_mean(manifold, [p0, p0, p0], lr=0.1, n_steps=200).point
+            assert geodesic_distance(manifold, m2, p0) < 1e-8
 
 
 # ---------------------------------------------------------------------------
