@@ -151,7 +151,9 @@ _MANIFOLDS = [
 
 def test_fuzz_geodesics_energy_and_rk4():
     """Random points/velocities/t: energy conserved (closed form) and the
-    closed form agrees with RK4 for random inputs."""
+    closed form agrees with RK4 for random inputs (the RK4 comparison
+    uses 500 steps and a 1e-5 tolerance: random draws occasionally land
+    near the sphere's poles, where the coordinate ODE is stiff)."""
     for manifold, (lo, hi), (vlo, vhi) in _MANIFOLDS:
         for _ in range(60):
             init = rng.uniform(lo, hi, 2)
@@ -162,9 +164,9 @@ def test_fuzz_geodesics_energy_and_rk4():
             e1 = manifold.metric_norm_sq(sol.point, sol.velocity)
             assert abs(e1 - e0) < 1e-9
             # random RK4 vs closed form (geometric distance)
-            rk = manifold.geodesic_generic(init, vel, t)
+            rk = manifold.geodesic_generic(init, vel, t, n_steps=500)
             d = geodesic_distance(manifold, rk.point, sol.point)
-            assert d < 1e-6, type(manifold).__name__
+            assert d < 1e-5, type(manifold).__name__
 
 
 def test_fuzz_parallel_transport_isometry_roundtrip():
