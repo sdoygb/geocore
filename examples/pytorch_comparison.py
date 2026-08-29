@@ -96,6 +96,59 @@ def jacobian_geocore():
     return Jp
 
 
+def hessian_geocore(P1, P2, th1, th2, state):
+    """Analytic 2x2 Hessian of f(th1, th2) = Re <psi|R_P1(th1) R_P2(th2)|psi>.
+    d^2/dth^2 R_P(th) = -R_P(th)/4  (closed form from P^2 = I); the mixed
+    term is the product of the first derivatives."""
+    from geocore.clifford import rotation_action_closed_form, pauli_action_on_state
+
+    psi = np.asarray(state, dtype=complex)
+    R2psi = rotation_action_closed_form(P2, th2, psi)
+    R1R2psi = rotation_action_closed_form(P1, th1, R2psi)
+    # dR/dth |psi> = -(1/2) sin(th/2)|psi> - (i/2) cos(th/2) P|psi>
+    d2 = -(0.5) * np.sin(th2 / 2) * psi - 0.5j * np.cos(th2 / 2) * pauli_action_on_state(P2, psi)
+    # mixed term: <psi| (dR1/dth1) d2 >  (A = dR1/dth1 is anti-Hermitian;
+    # <psi|A B|psi> is NOT <d1|d2>)
+    A_d2 = -(0.5) * np.sin(th1 / 2) * d2 - 0.5j * np.cos(th1 / 2) * pauli_action_on_state(P1, d2)
+    f00 = -0.25 * float(np.real(np.vdot(psi, R1R2psi)))
+    f11 = -0.25 * float(np.real(np.vdot(psi, R1R2psi)))
+    f01 = float(np.real(np.vdot(psi, A_d2)))
+    return np.array([[f00, f01], [f01, f11]])
+
+
+def hessian_torch(P1, P2, th1, th2, state):
+    import torch
+    from torch.autograd.functional import hessian
+
+    def pauli_matrix_torch(P):
+        I = torch.eye(2, dtype=torch.complex128)
+        X = torch.tensor([[0, 1], [1, 0]], dtype=torch.complex128)
+        Y = torch.tensor([[0, -1j], [1j, 0]], dtype=torch.complex128)
+        Z = torch.tensor([[1, 0], [0, -1]], dtype=torch.complex128)
+        M = torch.tensor([[1]], dtype=torch.complex128)
+        for ch in P:
+            M = torch.kron(M, {"I": I, "X": X, "Y": Y, "Z": Z}[ch])
+        return M
+
+    psi = torch.tensor(np.asarray(state, dtype=complex), dtype=torch.complex128)
+    M1 = pauli_matrix_torch(P1)
+    M2 = pauli_matrix_torch(P2)
+
+    def f(ab):
+        a, b = ab[0], ab[1]
+        c1 = torch.cos(a / 2)
+        s1 = torch.sin(a / 2)
+        c2 = torch.cos(b / 2)
+        s2 = torch.sin(b / 2)
+        r1 = (c1 * torch.eye(M1.shape[0], dtype=torch.complex128) - 1j * s1 * M1)
+        r2 = (c2 * torch.eye(M2.shape[0], dtype=torch.complex128) - 1j * s2 * M2)
+        out = r1 @ r2 @ psi
+        return torch.real(torch.vdot(psi, out))
+
+    H = hessian(f, torch.tensor([th1, th2], dtype=torch.float64))
+    return np.array(H.tolist())
+
+
 def spectrum_torch(n_grid=64):
     import torch
 
@@ -113,6 +166,73 @@ def spectrum_geocore(n_grid=64, n_evals=5):
     from geocore import Circle
 
     return Circle().laplacian_eigenvalues_closed(n_evals)
+
+
+def logistic_regression_torch(seed=0):
+    import torch
+
+    torch.manual_seed(seed)
+    x = torch.linspace(-3, 3, 200).unsqueeze(1)
+    y = (2 * x - 1 > 0).float()  # boundary w=2, b=-1
+    model = torch.nn.Linear(1, 1)
+    opt = torch.optim.SGD(model.parameters(), lr=0.3)
+    loss_fn = torch.nn.BCEWithLogitsLoss()
+    for _ in range(1500):
+        opt.zero_grad()
+        loss = loss_fn(model(x), y)
+        loss.backward()
+        opt.step()
+    return float(model.weight[0, 0]), float(model.bias[0])
+
+
+def logistic_regression_geocore(seed=0):
+    from geocore import PolarPlane, minimize
+
+    rng = np.random.default_rng(seed)
+    x = np.linspace(-3, 3, 200)
+    y = (2 * x - 1 > 0).astype(float)
+    P = PolarPlane()
+
+    def bce(params):
+        w, b = params[0], params[1]
+        z = w * x + b
+        return float(np.mean(np.logaddexp(0.0, z) - y * z))  # BCE(logits)
+
+    res = minimize(P, bce, [0.5, 0.0], lr=0.3, n_steps=4000)
+    return float(res.point[0]), float(res.point[1])
+
+
+def rosenbrock(params):
+    x, y = params[0], params[1]
+    return (1 - x) ** 2 + 100 * (y - x * x) ** 2
+
+
+def adam_rosenbrock_torch(seed=0, steps=3000):
+    import torch
+
+    torch.manual_seed(seed)
+    p = torch.tensor([-0.5, 0.5], requires_grad=True)
+    opt = torch.optim.Adam([p], lr=0.01)
+    for _ in range(steps):
+        opt.zero_grad()
+        f = (1 - p[0]) ** 2 + 100 * (p[1] - p[0] ** 2) ** 2
+        f.backward()
+        opt.step()
+    return float(p[0]), float(p[1]), float(f)
+
+
+def adam_rosenbrock_geocore(seed=0, steps=3000):
+    from geocore import PolarPlane, minimize
+
+    P = PolarPlane()
+
+    def f(params):
+        r, ph = params[0], params[1]
+        return rosenbrock([r * np.cos(ph), r * np.sin(ph)])
+
+    res = minimize(P, f, [0.7, 2.4], lr=0.01, n_steps=steps, optimizer="adam")
+    x, y = res.point[0] * np.cos(res.point[1]), res.point[0] * np.sin(res.point[1])
+    return float(x), float(y), float(rosenbrock([x, y]))
 
 
 def main():
@@ -143,5 +263,33 @@ def main():
     print(f"discrete-vs-continuum error: {err_s:.3f} (converges O(1/N^2))")
 
 
+def main_extra():
+    print("\n=== 2b. LOGISTIC REGRESSION (classify y = (2x-1 > 0)) ===")
+    w_t, b_t = logistic_regression_torch()
+    w_g, b_g = logistic_regression_geocore()
+    print(f"PyTorch : w = {w_t:+.3f}  b = {b_t:+.3f}")
+    print(f"geocore : w = {w_g:+.3f}  b = {b_g:+.3f}")
+
+    print("\n=== 2c. HESSIAN of Re<psi|R_P1 R_P2|psi> ===")
+    import numpy as _np
+    _rng = _np.random.default_rng(0)
+    state = _rng.standard_normal(4) + 1j * _rng.standard_normal(4)
+    H_g = hessian_geocore("XY", "YX", 0.4, 0.9, state)
+    H_t = hessian_torch("XY", "YX", 0.4, 0.9, state)
+    err_h = _np.abs(H_g - H_t).max()
+    print("geocore analytic Hessian:")
+    print(_np.round(H_g, 4))
+    print("torch autograd Hessian:")
+    print(_np.round(H_t, 4))
+    print(f"max |difference|: {err_h:.2e}")
+
+    print("\n=== 2d. ADAM on Rosenbrock (torch.optim.Adam vs RiemannianAdam) ===")
+    w_t, b_t, f_t = adam_rosenbrock_torch()
+    w_g, b_g, f_g = adam_rosenbrock_geocore()
+    print(f"PyTorch : ({w_t:.4f}, {b_t:.4f})  f = {f_t:.3e}")
+    print(f"geocore : ({w_g:.4f}, {b_g:.4f})  f = {f_g:.3e}")
+
+
 if __name__ == "__main__":
     main()
+    main_extra()

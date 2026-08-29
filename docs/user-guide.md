@@ -113,6 +113,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 22 | Hurricane track geometry (IBTrACS) | — | activity region, NNW, Sept peak, 3 track clusters | — |
 | 23 | Live storm forecast vs NHC | — | +24h within 0.8 deg of NHC (JULIO 2026) | — |
 | 24 | PyTorch classic examples re-run | — | Jacobian 1.1e-16 vs torch autograd | — |
+| 25 | More PyTorch examples (logistic, Hessian, Adam) | — | Hessian 1.1e-16; caught mixed-term bug | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -150,5 +151,5 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 24 features, 185 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 25 features, 188 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons), 12 measured shortcuts (see catalog).

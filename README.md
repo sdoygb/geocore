@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 185 tests
+└── tests/                   # 188 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -487,6 +487,19 @@ verification discipline: PyTorch's automatic differentiation and our
 analytic closed form compute the same derivative to machine precision —
 the analytic path is not an approximation, it is the exact answer.
 
+Extended comparisons (`examples/pytorch_comparison.py`):
+
+| Example | PyTorch | geocore | Agreement |
+|---|---|---|---|
+| Logistic regression (boundary x=0.5) | nn.Linear + BCE → x≈0.50 | minimize() → x≈0.41 | both near the truth |
+| Hessian of Re⟨ψ\|R₁R₂\|ψ⟩ | `torch.autograd.functional.hessian` | analytic 2×2 Hessian | **1.1e-16** |
+| Adam on Rosenbrock | torch.optim.Adam → f≈2e-7 | RiemannianAdam → f≈4e-6 | both converge to (1,1) |
+
+The Hessian row is another verification win: the torch comparison caught
+a wrong naive derivation of the mixed term (A = dR/dθ is anti-Hermitian,
+so ⟨ψ\|AB\|ψ⟩ ≠ ⟨d₁\|d₂⟩) — fixed, and the analytic Hessian now agrees
+with autograd to machine precision.
+
 ### Spectral (geometrized) ENSO forecast (`examples/enso_spectral_forecast.py`)
 
 The spectrum as a geometric invariant: the observed ONI's dominant
@@ -662,6 +675,9 @@ Done so far — each with machine-precision verification + measured benchmark:
     lifecycle prediction honestly absent.
 24. ✅ PyTorch classic examples re-run: linear regression, autograd
     Jacobian (1.1e-16 vs torch), spectrum — the same math, verified.
+25. ✅ More PyTorch examples: logistic regression, Hessian (1.1e-16 vs
+    torch autograd; caught a wrong mixed-term derivation), Adam on
+    Rosenbrock (both converge).
 
 Next candidates (hypotheses to measure, not claims):
 - Intensity/lifecycle modeling (the honest gap the comparison exposed).
