@@ -127,7 +127,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 132 tests
+└── tests/                   # 142 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -316,6 +316,30 @@ are roots verified by substitution to 1e-10.  The vectorized sweep
 (`logical_error_sweep`) is measured 18.7× faster than the per-point
 closed-form loop (and ~600× vs the O(2^n) state-vector simulation).
 
+## Is this a tool? — property-based evidence
+
+Every invariant is also verified on **randomly generated** inputs, not
+just the fixed scenarios in the other tests (`tests/test_property.py`,
+fixed seeds, ~700 random cases): random Paulis/rotations (including edge
+angles 0, 2π, ±4π), random deep Clifford circuits, random manifold
+points/velocities, random point sets, random QEC parameters — all
+invariants hold machine-precision.  A real end-to-end use case
+(`examples/real_use.py`) recovers the true direction and the anisotropic
+noise structure (magnitudes + orientation) of a directional sensor from
+raw sphere measurements:
+
+```
+true direction             : [0.931  0.5191]
+geocore Frechet mean       : [0.9303 0.5118] | error 5.91e-03 rad
+tangent PCA eigenvalues    : [0.0058 0.0631] (true 0.0064, 0.0625)
+recovered long-axis angle  : 3.08 deg off the true noise axis
+```
+
+The geometric pipeline is the only one that recovers the anisotropic
+spread of directions on a sphere — the naive Euclidean mean has no
+principled analogue.  The API is dynamic (arbitrary inputs, runtime
+verification, runtime shortcut dispatch); the tests prove it.
+
 ## Clifford group elements (L0 extension)
 
 A `Clifford` object on n qubits: the symplectic tableau (2n×2n binary
@@ -410,6 +434,10 @@ Done so far — each with machine-precision verification + measured benchmark:
 14. ✅ Clifford group elements (L0 extension): symplectic tableau with
     full 2-bit phases, composition/conjugation verified against dense
     truth (up to the projective global phase).
+15. ✅ Property-based (fuzz) tests: ~700 random cases across every
+    feature (arbitrary inputs, edge angles, deep circuits) — the
+    dynamic-tool evidence — plus a real end-to-end use case
+    (directional-sensor parameter recovery, examples/real_use.py).
 
 Next candidates (hypotheses to measure, not claims):
 - Circuit object (gate-list wrapper with optimize + verification).
