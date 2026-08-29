@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 214 tests
+└── tests/                   # 218 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -595,6 +595,41 @@ barren plateaus; the per-parameter RMS (not the full-vector norm) is the
 reported quantity because the vector norm grows like √P and would mask
 the effect.
 
+### Quantum: pre-training against barren plateaus (`examples/vqe_barren_prewarm.py`)
+
+The step beyond the diagnostics: not just *measuring* the plateau, but
+testing a **mitigation protocol** — initialize the VQE circuit from a
+classically optimized product state.  Ising chain n=12, HEA L=2 (46
+params); exact analytic gradients throughout; sparse eigensolve as the
+machine reference.
+
+```
+exact ground state (sparse eigensolve): -14.925971
+product-state warm start: E_prod = -13.555 (gap 1.37, fidelity 0.131)
+
+[A] Global fidelity cost F = 1-|<psi|gs>|^2 (plateau archetype):
+      init grad scale:  random 2.65e-07  warm 2.0e-02   (~5 orders)
+      fixed-step SGD 300: random fidelity 0.000 (stuck)
+                          warm   fidelity 0.402 (descends)
+      Adam 300 (honest contrast): random reaches 0.574 — adaptive
+      normalization masks the small-gradient symptom (direction SNR
+      remains the real cost); reported, not hidden.
+
+[B] Local Ising energy (realistic VQE), Adam 300:
+      random        : E 2.371 -> -14.528  (error +0.398)
+      warm_naive    : grad_rms 3.8e-05 (trap!) — every RZZ slot is
+                      EXACTLY zero: -(i/2)ZZ maps the real product
+                      state to a purely imaginary one, so Re<psi|H|dpsi>
+                      = 0 to machine precision; RY slots only carry the
+                      classical optimization residual
+      warm_perturbed: grad_rms 5.4e-02 (escapes the trap)
+```
+
+Honest framing: this is a mitigation protocol with measured numbers
+(the naive zero-fill trap is a real implementation hazard that machine
+precision exposes), not a claimed solution of the open barren-plateau
+problem.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -825,6 +860,11 @@ Done so far — each with machine-precision verification + measured benchmark:
     energy (width effect, 2^-n direction), no plateau at n=2 (why
     small-molecule VQE works), shallow local-cost VQE still trains at
     n=8 (error 0.34 vs exact).
+32. ✅ Quantum: pre-training against barren plateaus — the mitigation
+    step: classical product-state warm start restores the global-cost
+    gradient ~5 orders of magnitude at n=12 (SGD stuck at fidelity
+    0.000 vs warm 0.402); machine precision exposed the naive
+    zero-fill trap (RZZ slots exactly zero on the real-Pauli cost).
 
 Next candidates (hypotheses to measure, not claims):
 - QAOA (MaxCut) — combinatorial optimization on the same pipeline.
