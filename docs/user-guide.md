@@ -125,6 +125,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 34 | Quantum: noise-aware VQE geometry | — | affine energy (ZNE linear exact); QFI contracts by c(λ); natural gradient immune | — |
 | 35 | Quantum: non-depolarizing noise geometry | — | AD scalar QFI (1−γ) but basis-dependent energy; PD anisotropic; twirl shrinks residual | — |
 | 36 | Quantum: coherent rotation noise geometry | — | pure rank-1; E=A cos²+B sin²+C sin; FS-QFI preserved (zero contraction); nat. grad not immune | — |
+| 37 | Quantum: QAOA (MaxCut) gradient geometry | — | gradient O(1-10) across n,p (no barren plateau); gamma/beta split; no param concentration | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -162,7 +163,8 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 36 features, 244 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 37 features, 250 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons + VQE + barren-plateau diagnostics + pre-training
 mitigation + geometric-root analysis + noise geometry series (4
-fingerprints)), 12 measured shortcuts (see catalog).
+fingerprints) + QAOA gradient geometry), 12 measured shortcuts (see
+catalog).

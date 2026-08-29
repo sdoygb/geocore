@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 244 tests
+└── tests/                   # 250 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -758,6 +758,34 @@ isotropic (depolarizing) / metric-scalar-basis-dependent-energy
 unitary (coherent).  Honest framing: a root classification,
 machine-verified, not a claimed full solution of NISQ mitigation.
 
+### Quantum: QAOA (MaxCut) gradient geometry (`examples/vqe_qaoa_geometry.py`)
+
+QAOA — VQE's combinatorial-optimization sibling — with the exact
+analytic gradient machinery of the plateau series.  H_C is diagonal
+(diagonal phase in O(2^n)) and H_B is a layer of X rotations, so the
+gradient is a closed form (reverse-adjoint, verified to 2.7e-9):
+
+```
+[1] Gradient scale vs width n (p=2, 10 pts): euc/intrinsic stay
+    O(1-10) for n=6..14 — NO exponential decay
+    (contrast HEA fidelity cost: -0.32/decade per qubit)
+[2] Gradient scale vs depth p (n=10): stays O(1-10) for p=1..5
+    -> QAOA's deterministic |+> start + 2-local cost avoid barren
+       plateaus, measured with exact gradients (the literature
+       expectation, machine-verified; and at these depths it does
+       not even soften with p)
+[3] Optimal parameters do NOT concentrate strongly on this graph
+    family (gamma spread ~1.0, beta spread ~0.7 across n=8,10,12;
+    Adam lands in different local optima) — reported honestly:
+    the literature concentration is graph-family-dependent
+[4] p=2 optimized cut ratio 0.79..0.93 of the exhaustive MaxCut
+    (cycle-plus-matching 3-regular graphs)
+```
+
+Graph: deterministic 3-regular cycle + diameter matching (n even);
+MaxCut by exhaustive cut count as the machine reference.  Honest: exact
+gradients, one deterministic family — not a claim about all QAOA.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -1015,11 +1043,18 @@ Done so far — each with machine-precision verification + measured benchmark:
     A cos²+B sin²+C sin (2e-16), FS-QFI preserved exactly (ZERO
     metric contraction), natural gradient NOT immune, ZNE exact in
     the eps=sin²(θ/2) space iff C=0.
+37. ✅ Quantum: QAOA (MaxCut) gradient geometry — exact analytic
+    gradients (diagonal phase + X rotations, reverse-adjoint,
+    2.7e-9): gradient scale stays O(1-10) across n=6..14 and p=1..5
+    (NO barren plateau, contrast HEA -0.32/qubit); gamma/beta split
+    measured; optimal parameters do NOT concentrate on this family
+    (honest); p=2 cut ratio 0.79-0.93 of exhaustive MaxCut.
 
 Next candidates (hypotheses to measure, not claims):
-- QAOA (MaxCut) — combinatorial optimization on the same pipeline.
 - The noise spectrum as a table: all four fingerprints side by side,
   with the intermediate regimes (mixed coherent + depolarizing).
+- QAOA parameter transfer: train on small n, apply to large n
+  (transferability measured, since concentration is family-dependent).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
