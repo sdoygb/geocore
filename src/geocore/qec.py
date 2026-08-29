@@ -21,6 +21,8 @@ is the O(1) leading-law prediction (prediction instead of simulation).
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 
 __all__ = [
@@ -29,6 +31,11 @@ __all__ = [
     "theta4_leading",
     "scaling_leading",
     "measure_scaling_exponent",
+    "logical_error_sweep",
+    "pseudo_threshold",
+    "crossover",
+    "diagnose",
+    "QECDiagnosticReport",
 ]
 
 
@@ -98,3 +105,140 @@ def measure_scaling_exponent(n: int = 3, thetas=None) -> tuple[float, float]:
     PLs = np.array([repetition_code_logical_error(t, n) for t in thetas])
     slope, intercept = np.polyfit(np.log(thetas), np.log(PLs), 1)
     return float(slope), float(np.exp(intercept))
+
+
+# ---------------------------------------------------------------------------
+# QEC diagnostics application layer
+# ---------------------------------------------------------------------------
+
+
+def logical_error_sweep(n: int, thetas) -> np.ndarray:
+    """Vectorized P_L(theta) over a sweep of noise strengths (the batch
+    core path: one O(n) vectorized sum instead of n_theta scalar calls)."""
+    thetas = np.atleast_1d(np.asarray(thetas, dtype=float))
+    from math import comb
+
+    s = np.sin(thetas / 2)
+    c = np.cos(thetas / 2)
+    pL = np.zeros_like(thetas)
+    for k in range(n // 2 + 1, n + 1):
+        pL = pL + comb(n, k) * s ** (2 * k) * c ** (2 * (n - k))
+    return pL
+
+
+def pseudo_threshold(n: int) -> float:
+    """The pseudo-threshold: the largest theta with P_L(n, theta) < P_phys
+    (the physical single-qubit error rate sin^2(theta/2)).
+
+    For the distance-3 code this is EXACT: P_L(3) = s^2 (3 - 2s) with
+    s = sin^2(theta/2), so P_L = P_phys at s = 1/2, i.e. theta* = pi/2.
+    General n: numerical root (brentq), verified by substitution in tests.
+    """
+    if n == 3:
+        return float(np.pi / 2)
+    from scipy.optimize import brentq
+
+    def g(theta):
+        return repetition_closed_form(theta, n) - np.sin(theta / 2) ** 2
+
+    lo, hi = 1e-8, np.pi - 1e-8
+    if g(lo) >= 0 or g(hi) <= 0:
+        raise ValueError(f"pseudo_threshold(n={n}): no crossing in (0, pi)")
+    return float(brentq(g, lo, hi))
+
+
+def crossover(n1: int, n2: int) -> float:
+    """The noise strength where P_L(n1, theta) = P_L(n2, theta) — the
+    distance at which the two codes are equally protected (for coherent
+    noise the larger code wins at low theta, so this is the crossover
+    point in their favor)."""
+    from scipy.optimize import brentq
+
+    def g(theta):
+        return repetition_closed_form(theta, n1) - repetition_closed_form(theta, n2)
+
+    lo, hi = 1e-8, np.pi - 1e-8
+    g_lo, g_hi = g(lo), g(hi)
+    if g_lo * g_hi > 0:
+        raise ValueError(f"crossover({n1}, {n2}): no crossing in (0, pi)")
+    return float(brentq(g, lo, hi))
+
+
+@dataclasses.dataclass
+class QECDiagnosticReport:
+    """The measured diagnostic of a repetition-code family under coherent
+    X-noise.  Every field has an analytic counterpart (verified in tests):
+    exponents vs n+1, leading coefficients vs C(n,(n+1)/2)/2^{n+1},
+    pseudo-threshold of the d=3 code vs the exact pi/2, and any crossover
+    verified by substitution."""
+
+    distances: list
+    thetas: np.ndarray
+    logical_errors: np.ndarray  # (D, T)
+    empirical_exponents: np.ndarray  # per distance
+    analytic_exponents: np.ndarray  # n + 1
+    exponent_errors: np.ndarray
+    leading_coefficients: np.ndarray  # measured (fit)
+    analytic_coefficients: np.ndarray  # C(n,(n+1)/2) / 2^{n+1}
+    coefficient_relative_errors: np.ndarray
+    pseudo_thresholds: dict  # n -> theta*
+    crossover: float | None = None
+
+    def __repr__(self):
+        lines = ["QECDiagnosticReport"]
+        for i, n in enumerate(self.distances):
+            lines.append(
+                f"  d={n}: P_L~{self.leading_coefficients[i]:.4f} "
+                f"theta^{self.empirical_exponents[i]:.3f} "
+                f"(analytic theta^{n + 1}, coeff "
+                f"{self.analytic_coefficients[i]:.4f}); "
+                f"pseudo-threshold theta*={self.pseudo_thresholds[n]:.4f}"
+            )
+        if self.crossover is not None:
+            lines.append(f"  crossover P_L(d1)=P_L(d2) at theta={self.crossover:.4f}")
+        return "\n".join(lines)
+
+
+def diagnose(distances=(3, 5, 7), thetas=None) -> QECDiagnosticReport:
+    """Run the diagnostic over a code family: sweeps, empirical scaling
+    exponents and coefficients, pseudo-thresholds, and (for >= 2 codes)
+    the crossover.  ``thetas`` should be a small-to-large sweep (the
+    smallest half is used for the leading-law fits)."""
+    from math import comb
+
+    if thetas is None:
+        thetas = np.array([0.005, 0.01, 0.02, 0.04, 0.08, 0.16, 0.32])
+    thetas = np.asarray(thetas, dtype=float)
+    fit = thetas[: max(3, len(thetas) // 2)]  # small-theta window
+    errors = []
+    exponents = []
+    coeffs = []
+    a_coeffs = []
+    c_errors = []
+    thresholds = {}
+    for n in distances:
+        pl = logical_error_sweep(n, thetas)
+        pl_fit = logical_error_sweep(n, fit)
+        slope, intercept = np.polyfit(np.log(fit), np.log(pl_fit), 1)
+        exponents.append(slope)
+        errors.append(abs(slope - (n + 1)))
+        coeff = float(np.exp(intercept))
+        coeffs.append(coeff)
+        a_coeff = comb(n, (n + 1) // 2) / 2.0 ** (n + 1)
+        a_coeffs.append(a_coeff)
+        c_errors.append(abs(coeff - a_coeff) / a_coeff)
+        thresholds[n] = pseudo_threshold(n)
+    cross = crossover(distances[0], distances[1]) if len(distances) >= 2 else None
+    return QECDiagnosticReport(
+        distances=list(distances),
+        thetas=thetas,
+        logical_errors=np.vstack([logical_error_sweep(n, thetas) for n in distances]),
+        empirical_exponents=np.array(exponents),
+        analytic_exponents=np.array([n + 1 for n in distances]),
+        exponent_errors=np.array(errors),
+        leading_coefficients=np.array(coeffs),
+        analytic_coefficients=np.array(a_coeffs),
+        coefficient_relative_errors=np.array(c_errors),
+        pseudo_thresholds=thresholds,
+        crossover=cross,
+    )

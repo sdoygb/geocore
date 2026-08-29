@@ -234,7 +234,7 @@ First candidate shortcuts (to be measured, not assumed):
 | `rotations.py` | Layer 0 (Rotation) + Layer 1 (`rotation.*`, `circuit.optimize`) |
 | `manifolds.py` / `sphere.py` / `hyperbolic.py` / `spectral.py` | Layer 0 (manifold objects) + Layer 1 (`geodesic.*`, `laplacian.*`) |
 | `derivatives.py` | Layer 1 (`rotation.derivative`, `geodesic.jacobian`) — analytic derivatives (≈ autograd) |
-| `qec.py` | Application layer (QEC diagnostics) + Layer 1 (`qec.logical_error`) |
+| `qec.py` | Application layer (QEC diagnostics: sweeps, pseudo-thresholds, crossovers) + Layer 1 (`qec.logical_error`) |
 | `optim.py` | Layer 1 (`optim.gradient`, `optim.step`) + application API (≈ `torch.optim`: SGD, Adam) |
 | `verify.py` | Layer 2 (first Invariant implementations) |
 | `shortcuts.py` | Layer 3 (ShortcutRegistry + BenchmarkLog) |
