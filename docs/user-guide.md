@@ -117,6 +117,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 26 | EuclideanSpace(n) high-dim | — | d=10 logistic acc 0.994, w cos +0.999 vs torch | — |
 | 27 | Breast-cancer diagnosis (real, 30 features) | — | acc 0.9649, identical to torch | — |
 | 28 | NPC screening feasibility | — | effect sizes + labeled simulation (LOOCV 0.97) | — |
+| 29 | NPC geographic association | — | 20-30x ASIR contrast; not a population artifact | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -154,5 +155,5 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 28 features, 199 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 29 features, 203 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons), 12 measured shortcuts (see catalog).
