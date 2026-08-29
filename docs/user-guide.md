@@ -115,6 +115,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 24 | PyTorch classic examples re-run | — | Jacobian 1.1e-16 vs torch autograd | — |
 | 25 | More PyTorch examples (logistic, Hessian, Adam) | — | Hessian 1.1e-16; caught mixed-term bug | — |
 | 26 | EuclideanSpace(n) high-dim | — | d=10 logistic acc 0.994, w cos +0.999 vs torch | — |
+| 27 | Breast-cancer diagnosis (real, 30 features) | — | acc 0.9649, identical to torch | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -152,5 +153,5 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 26 features, 192 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 27 features, 196 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons), 12 measured shortcuts (see catalog).

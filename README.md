@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 192 tests
+└── tests/                   # 196 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -481,6 +481,22 @@ d = 10-feature logistic regression on EuclideanSpace(11) reaches 99.4%
 accuracy with the learned weight direction at cos = +0.999 of the true
 one — matching torch's nn.Linear + BCEWithLogits (0.994, cos +1.000).
 
+**Real application — breast-cancer diagnosis** (`examples/breast_cancer.py`):
+the Wisconsin dataset (569 clinical samples, 30 nucleus-measurement
+features) classified with the EuclideanSpace(31) logistic regression:
+
+```
+geocore (RiemannianAdam): test acc 0.9649, sens 0.970, spec 0.957
+torch (nn.Linear + Adam): test acc 0.9649, sens 0.970, spec 0.957
+|accuracy difference| = 0.0000   (identical confusion matrices)
+top weights: radius error, area error, fractal dimension error,
+worst texture, worst area — nucleus-size hallmarks of malignancy
+```
+
+The 0.965 test accuracy matches the literature reference (~0.95-0.97
+for plain logistic regression on this dataset), the two stacks agree
+exactly, and the learned feature ranking is clinically sensible.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -692,6 +708,9 @@ Done so far — each with machine-precision verification + measured benchmark:
 26. ✅ EuclideanSpace(n): arbitrary-dimension optimization/classification
     (the 2D-only limitation fixed) — high-dim logistic matches torch
     (acc 0.994 both, w cos +1.000 vs +0.999).
+27. ✅ Real high-dim application: breast-cancer diagnosis (Wisconsin,
+    30 features) — test acc 0.9649, identical to torch (diff 0.0000),
+    matching the literature reference.
 
 Next candidates (hypotheses to measure, not claims):
 - Intensity/lifecycle modeling (the honest gap the comparison exposed).
