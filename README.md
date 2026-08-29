@@ -129,7 +129,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 171 tests
+└── tests/                   # 178 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -424,6 +424,28 @@ the end of the ONI file (the trailing values turn positive through
 La Nina that the 2026 official tail then interrupts — both signals
 cross-check each other.
 
+### Hurricane track geometry (IBTrACS, NA basin 1980-2026)
+
+`examples/hurricane.py` analyzes 746 real storm tracks as curves on the
+sphere: per-track centroids, the activity region (Frechet mean + PCA +
+spread ellipse), circular movement statistics, and a simple centroid
+clustering:
+
+```
+activity region center : 27.7N, 64.6W (angular std 19.4 deg), anisotropy 2.2
+mean movement          : 347.6 deg from north (NNW)
+season peak            : September (June-November season)
+track clusters         : Gulf-Caribbean (24.3N 86.3W, 263 storms),
+                         mid-latitude (30.7N 63.0W, 249),
+                         Cape Verde (24.4N 41.7W, 234)
+```
+
+All results match real climatology: the central-western tropical
+Atlantic activity center, the NNW mean movement, the September peak,
+and the three clusters matching the known track types (Cape Verde
+storms crossing the Atlantic, Gulf-Caribbean storms, mid-latitude
+recurving storms).
+
 ### Spectral (geometrized) ENSO forecast (`examples/enso_spectral_forecast.py`)
 
 The spectrum as a geometric invariant: the observed ONI's dominant
@@ -591,6 +613,9 @@ Done so far — each with machine-precision verification + measured benchmark:
     3.62 yr (72% band power), backtested (mean error ~1.6 yr), final
     forecast 2026.6 winter-locked to 2026-27 DJF; spectral beats
     interval statistics on the backtest.
+22. ✅ Hurricane track geometry (IBTrACS, 746 NA storms): activity
+    region center/PCA, NNW movement, September peak, and three clusters
+    matching the real track types.
 
 Next candidates (hypotheses to measure, not claims):
 - Documentation hosting (GitHub Pages).
