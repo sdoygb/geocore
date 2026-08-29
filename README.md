@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 208 tests
+└── tests/                   # 214 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -562,6 +562,39 @@ RY+CNOT hardware-efficient ansatz is inexpressible for this ground
 state (stuck 0.02 Ha above), and my hand-written analytic gradient had
 a gate-slot bug (caught by the gradient verification).
 
+### Quantum: barren-plateau diagnostics (`examples/vqe_barren_plateaus.py`)
+
+The open research problem behind VQE's scalability — cost-function
+dependent barren plateaus (Cerezo et al., Nat. Commun. 12, 1791): does
+the gradient of a parameterized circuit vanish as the system grows?
+Measured with geocore's **exact** analytic rotation derivatives
+(reverse-adjoint mode, O(P·2ⁿ), verified vs finite differences to
+3.5e-10) — no parameter-shift, no shot noise:
+
+```
+[1] Width effect (Ising chain, per-parameter ||grad||_rms, 50 seeds):
+      L=2:  local slope -0.097/decade/qubit   global slope -0.176
+      L=5:  local slope -0.102                 global slope -0.167
+    -> the global (n-local) cost <Z^⊗n> falls ~1.8x faster per qubit
+       than the 2-local Ising energy on the same shallow HEA (the
+       2^-n plateau slope would be -0.301; the HEA is a shallower
+       2-design, so the falloff is the same direction at a fraction
+       of the rate).  Depth barely matters at n<=10: width dominates.
+[2] Depth effect (Ising n=6): neither cost is barren yet — per-param
+    gradient stays O(10^-2) across L=1..6.
+[3] Small-system contrast (H2, 2 qubits): per-param gradient is flat
+    (~0.2) even at L=10 — no room for a plateau, which is why
+    small-molecule VQE trains at all.
+[4] Trainability: Ising n=8, L=2, local cost, Adam 300 steps:
+    -0.05 -> -9.50 (exact -9.838, error 0.34) — still trains.
+```
+
+The honest framing: this is a *diagnostic measurement* of a known
+phenomenon with machine-verified gradients, not a claim to have solved
+barren plateaus; the per-parameter RMS (not the full-vector norm) is the
+reported quantity because the vector norm grows like √P and would mask
+the effect.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -786,9 +819,17 @@ Done so far — each with machine-precision verification + measured benchmark:
     converged to the exact ground state (error 5e-10, chemical
     accuracy 1.6e-3); analytic gradient verified; ansatz
     expressibility diagnosed.
+31. ✅ Quantum: barren-plateau diagnostics — cost-function-dependent
+    VQE trainability measured with exact analytic gradients: global
+    n-local cost falls ~1.8x faster per qubit than the 2-local Ising
+    energy (width effect, 2^-n direction), no plateau at n=2 (why
+    small-molecule VQE works), shallow local-cost VQE still trains at
+    n=8 (error 0.34 vs exact).
 
 Next candidates (hypotheses to measure, not claims):
 - QAOA (MaxCut) — combinatorial optimization on the same pipeline.
+- Noise-aware VQE: how depolarizing noise biases E(θ) and breaks the
+  variational bound (the ZNE / error-mitigation direction).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.

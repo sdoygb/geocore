@@ -119,6 +119,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 28 | NPC screening feasibility | — | effect sizes + labeled simulation (LOOCV 0.97) | — |
 | 29 | NPC geographic association | — | 20-30x ASIR contrast; not a population artifact | — |
 | 30 | Quantum: H2 VQE | — | exact ground state to 5e-10; analytic grad verified | — |
+| 31 | Quantum: barren-plateau diagnostics | — | global cost falls ~1.8× faster/qubit than local; no plateau at n=2 | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -156,5 +157,6 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 30 features, 208 tests (incl. ~700 fuzz cases + real-data tests +
-PyTorch comparisons + VQE), 12 measured shortcuts (see catalog).
+Done: 31 features, 214 tests (incl. ~700 fuzz cases + real-data tests +
+PyTorch comparisons + VQE + barren-plateau diagnostics), 12 measured
+shortcuts (see catalog).
