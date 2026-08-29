@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 266 tests
+└── tests/                   # 277 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -864,6 +864,23 @@ Honest: T ~ 1/Δ² is family-dependent; odd-n Ising needs a
 symmetry-aware path; the H2 test is the 2-qubit reduction (full
 spin-orbital JW pipeline is future work).
 
+### Quantum: LiH molecule (`examples/vqe_lih_evolution.py`)
+
+The molecular extension beyond H2 — LiH STO-3G, **12 qubits, 4
+electrons** (openfermion JW, verified: the JW matrix reproduces FCI
+−7.882324 exactly; the H_diag ground state = the HF state −7.8619).
+Zero-gradient discrete evolution on the diagonal→full path:
+
+```
+[1] Fidelity to the exact GS: 0.995-0.999 (p=50-200, T=10-80)
+[2] Energy error vs exact (chem. accuracy 1.6e-3 Ha):
+      p=100 T=40: +0.0013 Ha   (inside!)
+      p=200 T=80: +0.0011 Ha
+```
+
+The first real molecule beyond the 2-qubit H2 reduction, solved with
+zero gradients (the plateau never enters).  Requires openfermion.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -1147,14 +1164,20 @@ Done so far — each with machine-precision verification + measured benchmark:
     Odd/even diagnosed as a spatial property (frustrated boundary →
     Z2-odd sector → |+> symmetry-forbidden); pure-sector init fixes
     it at scale.
+41. ✅ Quantum: LiH molecule (12 qubits) — openfermion JW verified vs
+    FCI (−7.882324, exact); the diagonal-part ground state = HF state
+    (−7.8619); zero-gradient discrete evolution reaches chemical
+    accuracy (err +0.0013 Ha, inside 1.6e-3) — the molecular
+    extension beyond the 2-qubit H2 reduction.  Debugged: JW qubit
+    order (big-endian, no flip), the constant double-count, and the
+    N=2 sector projection.
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,
   with the intermediate regimes (mixed coherent + depolarizing).
 - QAOA parameter transfer: train on small n, apply to large n
   (transferability measured, since concentration is family-dependent).
-- Full spin-orbital JW pipeline for LiH (the 2-qubit H2 reduction is
-  done; the general fermionic mapping is the next step).
+- LiH at larger basis / bond-length scan (the potential curve).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.

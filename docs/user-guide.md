@@ -129,6 +129,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 38 | Quantum: spectrum-guided vs plateaus | — | guided params 3-7× larger gradient, slower decay (−0.309 vs −0.356/q); better convergence | — |
 | 39 | Quantum: discrete dynamic evolution | — | zero-gradient adiabatic: fid 0.978 (n=10) while HEA is barren; plateau never enters | — |
 | 40 | Quantum: evolution scaling + molecule | — | unified sector-pure path (odd+even) T~O(n²), fid 0.97@n=12, 0.966@n=14; H2 chemical accuracy zero-gradient; odd-n = Z2-odd sector (frustrated boundary), pure-sector init fixes | — |
+| 41 | Quantum: LiH molecule (12 qubits) | — | JW=FCI exact; diag GS=HF; zero-gradient evolution to chem accuracy (1.3e-3 Ha) | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -166,9 +167,9 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 40 features, 266 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 41 features, 277 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons + VQE + barren-plateau diagnostics + pre-training
 mitigation + geometric-root analysis + noise geometry series (4
 fingerprints) + QAOA gradient geometry + spectrum-guided
-parameterization + discrete dynamic evolution + evolution scaling),
-12 measured shortcuts (see catalog).
+parameterization + discrete dynamic evolution + evolution scaling +
+LiH molecule), 12 measured shortcuts (see catalog).
