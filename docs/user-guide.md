@@ -118,6 +118,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 27 | Breast-cancer diagnosis (real, 30 features) | — | acc 0.9649, identical to torch | — |
 | 28 | NPC screening feasibility | — | effect sizes + labeled simulation (LOOCV 0.97) | — |
 | 29 | NPC geographic association | — | 20-30x ASIR contrast; not a population artifact | — |
+| 30 | Quantum: H2 VQE | — | exact ground state to 5e-10; analytic grad verified | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -155,5 +156,5 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 29 features, 203 tests (incl. ~700 fuzz cases + real-data tests +
-PyTorch comparisons), 12 measured shortcuts (see catalog).
+Done: 30 features, 208 tests (incl. ~700 fuzz cases + real-data tests +
+PyTorch comparisons + VQE), 12 measured shortcuts (see catalog).

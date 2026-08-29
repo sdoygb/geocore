@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 203 tests
+└── tests/                   # 208 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
