@@ -102,6 +102,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 13 | Spread-ellipse visualization | — | exp image faithful to 1e-15 | — |
 | 14 | Clifford group elements | — | tableau vs dense 1e-16 (up to phase) | — |
 | 15 | Property (fuzz) tests | — | ~700 random cases, all invariants | — |
+| 16 | Real-data application (USGS 2024 seismicity) | — | centroids/PCA reproduce geography; naive ±180° error exposed | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -139,5 +140,6 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 15 features, 142 tests (incl. ~700 fuzz cases), 12 measured shortcuts
-(see catalog).  Next candidates: circuit object, documentation hosting.
+Done: 16 features, 145 tests (incl. ~700 fuzz cases + real-data tests),
+12 measured shortcuts (see catalog).  Next candidates: circuit object,
+documentation hosting.

@@ -127,7 +127,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 142 tests
+└── tests/                   # 145 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -340,6 +340,29 @@ spread of directions on a sphere — the naive Euclidean mean has no
 principled analogue.  The API is dynamic (arbitrary inputs, runtime
 verification, runtime shortcut dispatch); the tests prove it.
 
+### Real data: 2024 global seismicity
+
+`examples/real_data.py` analyzes the real USGS earthquake catalog (1507
+M≥5 events in 2024, stored in `examples/data/`) with the S² pipeline —
+the centroid is the seismicity's mass center, the PCA principal axis is
+the strike of the seismic belt:
+
+```
+=== Tonga-Fiji (crosses 180° meridian) (91 events) ===
+geometric centroid : -20.91, 179.71   (correct — the belt is at ~180°E)
+naive (lat,lon) avg: -20.84, -69.53   (lands in South America!)
+principal axis     : bearing 82.6 deg, eigenvalue ratio 1.9
+
+=== Global (1507 events) ===
+geometric centroid : -10.57, 167.10   (southwest Pacific — ring's center)
+naive (lat,lon) avg: -1.49,  25.84    (Africa — meaningless)
+```
+
+The naive Euclidean average of latitudes/longitudes is *demonstrably
+wrong* across the ±180° meridian (175° and −175° average to 0°) — the
+geometric treatment is the correct one for directions on a sphere, and
+the difference is visible in real data, not a synthetic toy.
+
 ## Clifford group elements (L0 extension)
 
 A `Clifford` object on n qubits: the symplectic tableau (2n×2n binary
@@ -436,8 +459,12 @@ Done so far — each with machine-precision verification + measured benchmark:
     truth (up to the projective global phase).
 15. ✅ Property-based (fuzz) tests: ~700 random cases across every
     feature (arbitrary inputs, edge angles, deep circuits) — the
-    dynamic-tool evidence — plus a real end-to-end use case
-    (directional-sensor parameter recovery, examples/real_use.py).
+    dynamic-tool evidence — plus real end-to-end use cases
+    (examples/real_use.py, examples/real_data.py).
+16. ✅ Real-data application: 2024 USGS seismicity (1507 M≥5 events) —
+    the S² centroid/PCA reproduce verifiable geography (Japan centroid,
+    Tonga belt strike), and expose the naive (lat, lon) average's real
+    ±180° error.
 
 Next candidates (hypotheses to measure, not claims):
 - Circuit object (gate-list wrapper with optimize + verification).
