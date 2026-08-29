@@ -124,6 +124,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 33 | Quantum: geometric root of barren plateaus | — | intrinsic == euclidean decay (not a coordinate artifact); root = concentration × alignment | — |
 | 34 | Quantum: noise-aware VQE geometry | — | affine energy (ZNE linear exact); QFI contracts by c(λ); natural gradient immune | — |
 | 35 | Quantum: non-depolarizing noise geometry | — | AD scalar QFI (1−γ) but basis-dependent energy; PD anisotropic; twirl shrinks residual | — |
+| 36 | Quantum: coherent rotation noise geometry | — | pure rank-1; E=A cos²+B sin²+C sin; FS-QFI preserved (zero contraction); nat. grad not immune | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -161,7 +162,7 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 35 features, 237 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 36 features, 244 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons + VQE + barren-plateau diagnostics + pre-training
-mitigation + geometric-root analysis + noise geometry + non-depolarizing
-noise), 12 measured shortcuts (see catalog).
+mitigation + geometric-root analysis + noise geometry series (4
+fingerprints)), 12 measured shortcuts (see catalog).

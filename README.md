@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 237 tests
+└── tests/                   # 244 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -729,6 +729,35 @@ coherent terms and has O(g²) error on population terms.  Honest
 framing: a root classification of channels by fingerprint, not a
 claimed full solution of NISQ mitigation.
 
+### Quantum: coherent (unitary) rotation noise (`examples/vqe_noise_coherent.py`)
+
+The fourth and last fingerprint in the noise-channel spectrum — the
+unitary case: noise U(θ)=cos(θ/2)I+i sin(θ/2)E keeps states pure, so
+the pure Fubini-Study metric applies directly (no SLD needed).
+Machine-verified:
+
+```
+[1] purity: rank-1 preserved (geodesic arc of CP^N, not an affine
+    segment into the interior)
+[2] energy track closed form (single noise point):
+      E(th) = A cos^2(th/2) + B sin^2(th/2) + C sin(th)     (2e-16)
+[3] metric fingerprint: ZERO contraction — a fixed unitary preserves
+    the FS-QFI exactly (1e-16), unlike depolarizing (scalar c),
+    amplitude damping (scalar 1-g) and phase damping (anisotropic)
+[4] natural gradient NOT immune (metric unchanged, gradient rotated):
+    |g_nat| 0.898 -> 0.979 — the opposite of depolarizing noise
+[5] ZNE in the QEC channel-constant space eps = sin^2(th/2):
+      exact when C = 0 (rotation axis commuting at the state):
+      single qubit H=Z |0> X-axis: 1e-16
+      residual O(sqrt(eps(1-eps))) when C != 0 (measured 1e-2..5e-2)
+```
+
+The four-fingerprint spectrum completes the noise series: affine-
+isotropic (depolarizing) / metric-scalar-basis-dependent-energy
+(amplitude damping) / metric-anisotropic (phase damping) / metric-zero
+unitary (coherent).  Honest framing: a root classification,
+machine-verified, not a claimed full solution of NISQ mitigation.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -981,11 +1010,16 @@ Done so far — each with machine-precision verification + measured benchmark:
     (1−γ) but basis-dependent energy track (coherent linear / 
     population g²); phase damping ANISOTROPIC; Pauli twirl shrinks
     (not removes) the population residual; bound survives any CPTP.
+36. ✅ Quantum: coherent rotation noise geometry — the unitary fourth
+    fingerprint: states stay pure (rank-1), energy track closed form
+    A cos²+B sin²+C sin (2e-16), FS-QFI preserved exactly (ZERO
+    metric contraction), natural gradient NOT immune, ZNE exact in
+    the eps=sin²(θ/2) space iff C=0.
 
 Next candidates (hypotheses to measure, not claims):
 - QAOA (MaxCut) — combinatorial optimization on the same pipeline.
-- Coherent (unitary) rotation noise — no mixing, pure-state QFI
-  structure, sin²(θ/2) tracks.
+- The noise spectrum as a table: all four fingerprints side by side,
+  with the intermediate regimes (mixed coherent + depolarizing).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
