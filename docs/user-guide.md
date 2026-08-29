@@ -99,6 +99,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 9 | Batch geodesics / transport | vmap | batch == per-point (≤1e-14) | 46,290× (B=500) |
 | 10 | Analytic derivatives | autograd | ~1e-10 vs finite diff. | 2,390× / 66,000× (n=8) |
 | 11 | Frechet mean / variance / PCA | torch.mean/std | tr(Cov)=var; ellipse exact | — |
+| 13 | Spread-ellipse visualization | — | exp image faithful to 1e-15 | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -136,7 +137,6 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 12 features, 118 tests, 12 measured shortcuts (see catalog).
-Next candidates: spread-ellipse visualization (matplotlib), new geometric
-objects (Clifford group elements / circuit objects), documentation site
-hosting.
+Done: 13 features, 122 tests, 12 measured shortcuts (see catalog).
+Next candidates: new geometric objects (Clifford group elements / circuit
+objects), documentation site hosting.

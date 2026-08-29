@@ -280,6 +280,17 @@ semi-axes (a, b) the variance is exactly (a²+b²)/2, the covariance
 eigenvalues exactly (b²/2, a²/2), and the top principal direction is the
 long axis (|dot| = 1); a single point has zero spread.
 
+Spread ellipses (`geocore.viz`): the tangent PCA ellipse flowed through
+the exponential map onto each manifold (every ellipse point satisfies
+d(m, exp_m(v)) = |v|_g to machine precision), drawn in each manifold's
+natural chart:
+
+![spread ellipses](examples/spread_ellipses.png)
+
+(left: polar plane in Cartesian; middle: sphere in azimuthal-equidistant
+projection about the mean; right: hyperbolic plane in the upper
+half-plane.)
+
 ## QEC diagnostics application layer
 
 `geocore.qec.diagnose` runs the coherent-noise diagnostic over a code
@@ -367,9 +378,12 @@ Done so far — each with machine-precision verification + measured benchmark:
     Frechet variance, orthonormal-frame tangent covariance with
     tr(Cov) = variance to machine precision, ellipse statistics exact
     ((a²+b²)/2, (b²/2, a²/2), long-axis direction |dot|=1).
+13. ✅ Spread-ellipse visualization (geocore.viz): the tangent PCA
+    ellipse flowed through the exponential map (d(m, exp_m(v)) = |v|_g
+    to 1e-15), in each manifold's natural chart.
 
 Next candidates (hypotheses to measure, not claims):
-- Documentation site / full walkthrough notebook (all 12 features).
+- New geometric objects (Clifford group elements / circuit objects).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.

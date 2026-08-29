@@ -224,6 +224,26 @@ print("Frechet mean:", np.round(res.point, 5))
 print("variance:", round(frechet_variance(PolarPlane(), pts), 6))
 evals, evecs = principal_directions(PolarPlane(), pts)
 print("tangent PCA eigenvalues:", np.round(evals, 6))""",
+    "viz": """# spread ellipses: the tangent PCA ellipse flowed through the
+# exponential map onto each manifold (verified: d(m, exp_m(v)) = |v|_g)
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from geocore.viz import plot_spread
+from IPython.display import Image, display
+
+rng = np.random.default_rng(21)
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+for ax, M, pts, title in [
+    (axes[0], PolarPlane(),      rng.uniform(1.5, 3.0, (50, 2)), "PolarPlane (Cartesian)"),
+    (axes[1], Sphere(),          rng.uniform(0.8, 2.2, (50, 2)), "Sphere (azimuthal equidistant)"),
+    (axes[2], HyperbolicPlane(), rng.uniform(0.4, 1.8, (50, 2)), "HyperbolicPlane (upper half-plane)"),
+]:
+    plot_spread(M, pts, ax=ax, title=title)
+fig.tight_layout()
+fig.savefig("spread_ellipses.png", dpi=100)
+plt.close(fig)
+display(Image(filename="spread_ellipses.png"))""",
     "qec": """from geocore.qec import diagnose
 
 rep = diagnose((3, 5, 7))
@@ -259,6 +279,7 @@ def main():
     cells.append(new_code_cell(CODE["batch"]))
     cells.append(new_markdown_cell(MD["stats"]))
     cells.append(new_code_cell(CODE["stats"]))
+    cells.append(new_code_cell(CODE["viz"]))
     cells.append(new_markdown_cell(MD["qec"]))
     cells.append(new_code_cell(CODE["qec"]))
     cells.append(new_markdown_cell(MD["summary"]))
