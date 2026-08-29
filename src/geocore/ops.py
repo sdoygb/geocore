@@ -388,3 +388,77 @@ def _(manifold, initial, velocity, t, **kwargs):
         sol = manifold.geodesic_generic(init[i], vel[i], float(tt[i]))
         pts[i] = sol.point
     return pts
+
+
+# ---------------------------------------------------------------------------
+# v0.5 derivative operators (the geometric analogue of autograd): analytic
+# closed-form derivatives, verified against finite differences.
+# ---------------------------------------------------------------------------
+
+from .derivatives import geodesic_jacobian as _analytic_geodesic_jacobian  # noqa: E402
+from .derivatives import rotation_derivative as _analytic_rotation_derivative  # noqa: E402
+from .invariants import DerivativeValidity  # noqa: E402
+
+rotation_derivative_op = op(
+    "rotation.derivative",
+    invariants=[
+        DerivativeValidity(
+            lambda rotation, state: _analytic_rotation_derivative(
+                rotation.axis, rotation.theta, state
+            )
+        )
+    ],
+    theorem=(
+        "d/dtheta R_P(theta)|psi> = -(i/2) P R_P(theta)|psi>; with P^2 = I "
+        "this is -(1/2) sin(theta/2)|psi> - (i/2) cos(theta/2) P|psi> — the "
+        "closed form (O(2^n)).  The registered generic path is a central "
+        "difference of two dense matrix exponentials (O(8^n))."
+    ),
+)
+
+
+@rotation_derivative_op.register(Rotation, np.ndarray)
+def _(rotation, state):
+    from scipy.linalg import expm
+
+    from .verify import _pauli_matrix
+
+    P = _pauli_matrix(rotation.axis)
+    eps = 1e-6
+    U1 = expm(-1j * (rotation.theta + eps) / 2 * P)
+    U2 = expm(-1j * (rotation.theta - eps) / 2 * P)
+    return ((U1 - U2) @ np.asarray(state, dtype=complex)) / (2 * eps)
+
+
+geodesic_jacobian_op = op(
+    "geodesic.jacobian",
+    invariants=[DerivativeValidity(_analytic_geodesic_jacobian)],
+    theorem=(
+        "The Jacobians of the geodesic endpoint w.r.t. the initial point "
+        "and velocity (sensitivity / tangent propagation).  Each manifold "
+        "has an analytic closed form derived from its geodesic formula; "
+        "the registered generic path is a central difference of 8 "
+        "closed-form geodesic evaluations."
+    ),
+)
+
+
+@geodesic_jacobian_op.register_default
+def _(manifold, initial, velocity, t, **kwargs):
+    eps = 1e-6
+    init = np.asarray(initial, dtype=float)
+    vel = np.asarray(velocity, dtype=float)
+    Jp = np.zeros((2, 2))
+    Jv = np.zeros((2, 2))
+    for j in range(2):
+        dp = np.zeros(2)
+        dp[j] = eps
+        Jp[:, j] = (
+            manifold.geodesic_closed_form(init + dp, vel, t).point
+            - manifold.geodesic_closed_form(init - dp, vel, t).point
+        ) / (2 * eps)
+        Jv[:, j] = (
+            manifold.geodesic_closed_form(init, vel + dp, t).point
+            - manifold.geodesic_closed_form(init, vel - dp, t).point
+        ) / (2 * eps)
+    return Jp, Jv

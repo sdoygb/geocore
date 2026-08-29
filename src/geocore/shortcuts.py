@@ -25,7 +25,7 @@ import numpy as np
 
 from .invariants import VerificationReport
 
-__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "geodesic_polar_closed_form", "geodesic_sphere_closed_form", "geodesic_hyperbolic_closed_form", "geodesic_batch_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction", "optim_step_closed_form"]
+__all__ = ["BenchmarkLog", "Shortcut", "ShortcutRegistry", "registry", "rotation_closed_form", "rotation_derivative_closed_form", "geodesic_polar_closed_form", "geodesic_sphere_closed_form", "geodesic_hyperbolic_closed_form", "geodesic_batch_closed_form", "geodesic_jacobian_closed_form", "laplacian_circle_closed_form", "qec_scaling_prediction", "qec_theta4_prediction", "optim_step_closed_form"]
 
 
 @dataclasses.dataclass
@@ -111,6 +111,14 @@ class Shortcut:
             err = float(compare(generic_result, shortcut_result))
             return VerificationReport(
                 ok=err < atol, max_error=err, details=f"compare error {err:.2e}"
+            )
+        if isinstance(generic_result, tuple) and isinstance(shortcut_result, tuple):
+            err = max(
+                float(np.abs(np.asarray(g) - np.asarray(s)).max())
+                for g, s in zip(generic_result, shortcut_result)
+            )
+            return VerificationReport(
+                ok=err < atol, max_error=err, details=f"tuple max error {err:.2e}"
             )
         if hasattr(generic_result, "point") and hasattr(shortcut_result, "point"):
             err = max(
@@ -400,5 +408,54 @@ geodesic_batch_closed_form = registry.register(
         impl=_geodesic_batch_closed,
         flops_generic=lambda B: B * 200 * 6,   # per-point RK4: B x ODE work
         flops_shortcut=lambda B: B * 40,        # vectorized closed form
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# Eighth shortcut: analytic derivative (vs finite differences).  The
+# derivative is exact — finite differences only approximate to ~1e-10 —
+# and avoids the repeated function evaluations.
+# ---------------------------------------------------------------------------
+
+from .derivatives import geodesic_jacobian as _analytic_jacobian  # noqa: E402
+from .derivatives import rotation_derivative as _analytic_rotation_derivative  # noqa: E402
+from .ops import geodesic_jacobian_op, rotation_derivative_op  # noqa: E402
+
+
+def _rotation_derivative_closed(rotation, state):
+    return _analytic_rotation_derivative(rotation.axis, rotation.theta, state)
+
+
+def _derivative_size(rotation, state):
+    return len(rotation.axis)
+
+
+rotation_derivative_closed_form = registry.register(
+    Shortcut(
+        name="rotation.derivative_closed_form",
+        replaces=rotation_derivative_op,
+        impl=_rotation_derivative_closed,
+        flops_generic=lambda n: 2 * (2**n) ** 3,  # two dense expm
+        flops_shortcut=lambda n: 2 * (2**n),      # Pauli action + combine
+    )
+)
+
+
+def _jacobian_closed(manifold, initial, velocity, t):
+    return _analytic_jacobian(manifold, initial, velocity, t)
+
+
+def _jacobian_size(manifold, initial, velocity, t):
+    return 2
+
+
+geodesic_jacobian_closed_form = registry.register(
+    Shortcut(
+        name="geodesic.jacobian_closed_form",
+        replaces=geodesic_jacobian_op,
+        impl=_jacobian_closed,
+        flops_generic=lambda n: 8 * 20,  # 8 closed-form geodesic evals
+        flops_shortcut=lambda n: 60,      # analytic jacobian (trig + chain)
     )
 )

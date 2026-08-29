@@ -35,6 +35,7 @@ __all__ = [
     "DescentProperty",
     "ParallelTransportIsometry",
     "BatchConsistency",
+    "DerivativeValidity",
     "MergeClosure",
     "CancellationClosure",
     "UnitaryEquivalence",
@@ -341,6 +342,32 @@ class BatchConsistency(Invariant):
             ok=worst < 1e-9,
             max_error=worst,
             details=f"loop vs vectorized RK4 max error {worst:.2e}",
+        )
+
+
+class DerivativeValidity(Invariant):
+    """Derivative operator: the result equals the analytic closed-form
+    derivative to machine precision (finite differences can only
+    approximate; the analytic path is exact)."""
+
+    def __init__(self, analytic, atol: float = 1e-6, name: str = "derivative_validity"):
+        self.analytic = analytic
+        self.atol = atol
+        self.name = name
+
+    def check(self, result, *args, **kwargs) -> VerificationReport:
+        exact = self.analytic(*args)
+        if isinstance(result, tuple) and isinstance(exact, tuple):
+            err = max(
+                float(np.abs(np.asarray(r) - np.asarray(e)).max())
+                for r, e in zip(result, exact)
+            )
+        else:
+            err = float(np.abs(np.asarray(result) - np.asarray(exact)).max())
+        return VerificationReport(
+            ok=err < self.atol,
+            max_error=err,
+            details=f"analytic vs finite-difference max error {err:.2e}",
         )
 
 

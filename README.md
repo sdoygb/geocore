@@ -122,9 +122,10 @@ geocore/
 │   ├── optim.py             # Riemannian optimizer (≈ torch.optim)
 │   ├── sphere.py            # S²: spherical coords, great-circle geodesics
 │   ├── hyperbolic.py        # H²: upper half-plane, semicircle geodesics
+│   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 82 tests
+└── tests/                   # 93 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -202,6 +203,31 @@ component for the position — the closed-form-vs-RK4 batch comparison
 flagged it immediately (both paths would otherwise have been wrong in
 the same way).
 
+## Analytic derivatives (≈ autograd's gradient computation)
+
+PyTorch's autograd computes gradients; geocore provides *analytic*
+closed-form derivatives, verified against finite differences to ~1e-10:
+
+- `rotation.derivative` — d/dθ R_P(θ)|ψ⟩ = −(i/2) P R_P(θ)|ψ⟩ (closed form
+  from P² = I), O(2^n) vs two dense `expm`; measured **2,390× / 66,000×**
+  (n=8).
+- `geodesic.jacobian` — the Jacobians of the geodesic endpoint w.r.t. the
+  initial point and velocity (sensitivity / tangent propagation), closed
+  form per manifold (polar: chain rule through the Cartesian line; sphere:
+  through the R³ embedding including the rotating frame; hyperbolic:
+  through the semicircle parameters c, R, α, β).  Verified against central
+  differences to ~1e-10 on all three manifolds, plus the homogeneity
+  identity Jv·v₀ = t·γ′(t).  Modest measured speedup (~6× — its real
+  value is exactness over finite differences).
+
+```python
+from geocore import Rotation, get_op
+import numpy as np
+
+state = np.random.randn(8) + 1j*np.random.randn(8)
+d = get_op("rotation.derivative")(Rotation("XYZ", 0.7), state)  # verified
+```
+
 ## Manifolds (all with closed-form geodesics, verified)
 
 | Manifold | Metric | Geodesic (closed form) | Verified truths |
@@ -250,6 +276,9 @@ Done so far — each with machine-precision verification + measured benchmark:
    + RK4) and batch transport, verified identical to the per-point paths;
    batch closed form measured 46,290× at B=500; `minimize_batch` agrees
    with the per-point loop.
+9. ✅ Analytic derivatives (≈ autograd): `rotation.derivative` closed form
+   (2,390× / 66,000× at n=8) and per-manifold `geodesic.jacobian`
+   (verified to ~1e-10, incl. the Jv·v₀ = t·γ′(t) identity).
 
 Next candidates (hypotheses to measure, not claims):
 - Application layers (QEC diagnostics, geometric statistics primitives).
