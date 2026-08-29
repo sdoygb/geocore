@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 224 tests
+└── tests/                   # 231 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -668,6 +668,38 @@ this re-derives the root in coordinate-free terms and machine-verifies
 which levers work (position on the manifold) and which cannot
 (coordinates); it is not a claimed solution of the open problem.
 
+### Quantum: noise-aware VQE from information geometry (`examples/vqe_noise_geometry.py`)
+
+The geometric root of depolarizing noise and of ZNE — same style as the
+barren-plateau root analysis.  Geometry anchors: SLD-QFI for mixed
+states (0.11 def 3.1), Bures == QFI/4 (0.11 prop 3.3.4).  Key results,
+all machine-verified:
+
+```
+[0] Depolarizing noise = affine segment of state space:
+      E(lambda) = (1-lambda) E_pure + lambda Tr(H)/d     (EXACT, 2e-16)
+      -> linear ZNE is exact for one depolarizing point, by geometry
+[1] SLD-QFI contracts by a scalar:
+      F_noisy(lambda) = c(lambda) F_pure,
+      c(lambda) = (1-lambda)^2 / (1-lambda + 2 lambda / 2^n)   (1e-15)
+[2] Natural gradient is (nearly) immune:
+      euclidean grad x (1-lambda), natural grad x
+      (1-lambda+2lambda/d)/(1-lambda) ~= 1   (d=4096: 1.000054)
+      -> isotropic scalar contraction cancels in the natural gradient
+[3] Variational bound survives (Tr(rho H) >= E_gs, spectral theorem);
+    the SGD optimum is PULLED (lambda 0->0.6: +0.365 -> +0.400), while
+    Adam masks the pull (normalization) — reported honestly
+[4] ZNE exactness order = number of noise points:
+      L=1: linear extrap err 1.1e-16 (exact)
+      L=2: linear err 6.8e-3, degree-2 extrap err 5.6e-17
+```
+
+The two closed forms (affine energy, scalar QFI contraction) are
+coordinate-free statements about the noise channel, not observations of
+a particular circuit; honest framing as before — a root analysis with
+exact closed forms, not a claimed full solution of NISQ error
+mitigation.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -909,11 +941,17 @@ Done so far — each with machine-precision verification + measured benchmark:
     root = cost concentration × geometric alignment; natural gradient
     cannot cure it; warm start raises intrinsic scale 540x (rank
     deficiency = parameter redundancy).
+34. ✅ Quantum: noise-aware VQE from information geometry —
+    depolarizing noise is an affine segment (energy exactly linear in
+    λ, ZNE linear = exact for one noise point); SLD-QFI contracts by
+    c(λ)=(1−λ)²/(1−λ+2λ/2ⁿ) (1e-15); natural gradient immune to
+    O(1/d); variational bound survives, SGD optimum pulled (Adam
+    masks it); ZNE order = number of noise points.
 
 Next candidates (hypotheses to measure, not claims):
 - QAOA (MaxCut) — combinatorial optimization on the same pipeline.
-- Noise-aware VQE: how depolarizing noise biases E(θ) and breaks the
-  variational bound (the ZNE / error-mitigation direction).
+- Non-depolarizing noise (amplitude damping / coherent) — the affine
+  structure breaks; measure what survives.
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
