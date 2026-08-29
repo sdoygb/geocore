@@ -23,7 +23,13 @@ import numpy as np
 from .derivatives import log_map
 from .optim import minimize
 
-__all__ = ["geodesic_distance", "frechet_mean"]
+__all__ = [
+    "geodesic_distance",
+    "frechet_mean",
+    "frechet_variance",
+    "tangent_covariance",
+    "principal_directions",
+]
 
 
 def geodesic_distance(manifold, p, q) -> float:
@@ -94,3 +100,57 @@ def frechet_mean(
         manifold, f, _initial_guess(manifold, points, weights),
         lr=lr, n_steps=n_steps, atol=atol, grad_f=grad_f,
     )
+
+
+def _require_mean(manifold, points, mean):
+    if mean is None:
+        return frechet_mean(manifold, points, lr=0.1, n_steps=300).point
+    return np.asarray(mean, dtype=float)
+
+
+def frechet_variance(manifold, points, mean=None) -> float:
+    """The Frechet variance: (1/N) sum_i d(m, p_i)^2, the spread around
+    the Frechet mean m (the analogue of torch.var on a manifold).
+
+    On the flat polar plane this is the mean squared Cartesian distance
+    to the arithmetic mean; for a uniform ellipse of semi-axes (a, b) it
+    is (a^2 + b^2)/2 (verified in tests).
+    """
+    points = np.atleast_2d(np.asarray(points, dtype=float))
+    m = _require_mean(manifold, points, mean)
+    return float(
+        np.mean([geodesic_distance(manifold, m, p) ** 2 for p in points])
+    )
+
+
+def tangent_covariance(manifold, points, mean=None) -> np.ndarray:
+    """The (2 x 2) covariance in an *orthonormal* tangent frame at the
+    Frechet mean: (1/N) sum_i tilde{v}_i tilde{v}_i^T, where tilde{v}_i
+    is log_m(p_i) scaled by sqrt(g_diag(m)) (the coordinate frame of the
+    polar/spherical charts is not orthonormal — the metric is diag(1, r^2)
+    etc. — so the raw coordinate components would distort the geometry).
+
+    Key verified identity: tr(Cov) = Frechet variance, because
+    |log_m(p_i)|_g = d(m, p_i).  The eigendecomposition gives the
+    principal directions of the point spread on the manifold (tangent
+    PCA); eigenvectors are in the orthonormal frame — convert back with
+    v_coord = evec / sqrt(g_diag(m)) for coordinate use.
+    """
+    points = np.atleast_2d(np.asarray(points, dtype=float))
+    m = _require_mean(manifold, points, mean)
+    N = points.shape[0]
+    g0, g1 = manifold.metric_diag(m)
+    scale = np.array([np.sqrt(g0), np.sqrt(g1)])
+    vs = np.array([log_map(manifold, m, p) * scale for p in points])
+    return vs.T @ vs / N
+
+
+def principal_directions(manifold, points, mean=None):
+    """Eigendecomposition of the tangent covariance: returns
+    (eigenvalues, eigenvectors) in ascending order (the tangent PCA of
+    the point spread).  For an ellipse with semi-axes (a, b) on the flat
+    plane the eigenvalues are (b^2/2, a^2/2) and the top eigenvector is
+    the long axis (verified in tests)."""
+    cov = tangent_covariance(manifold, points, mean=mean)
+    evals, evecs = np.linalg.eigh(cov)  # ascending
+    return evals, evecs

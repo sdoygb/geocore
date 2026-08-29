@@ -125,7 +125,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 111 tests
+└── tests/                   # 118 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -255,6 +255,29 @@ numerically stable formulas (haversine / 2·asinh(√(δ/2))) — the naive
 acos/acosh loses precision for nearly coincident points (measured
 2.1e-8 error before the fix).
 
+### Manifold variance / covariance (≈ torch.std + tangent PCA)
+
+The Frechet variance is (1/N) Σ d(m, pᵢ)²; the tangent covariance maps
+every point to the mean's tangent space via the log map and computes
+(1/N) Σ log_m(pᵢ) log_m(pᵢ)ᵀ in an **orthonormal frame** (the coordinate
+charts are not orthonormal — g = diag(1, r²) etc. — so the components are
+scaled by √g_diag(m); the raw coordinates would distort the geometry,
+caught by the tr(Cov) = variance check).  Principal directions are the
+eigendecomposition (tangent PCA).
+
+```python
+from geocore import PolarPlane, frechet_variance, principal_directions
+
+var = frechet_variance(PolarPlane(), pts)
+evals, evecs = principal_directions(PolarPlane(), pts)  # ascending
+```
+
+Verified truths (machine precision): tr(Cov) = variance on all three
+manifolds (because |log_m(p)|_g = d(m, p)); for a uniform ellipse of
+semi-axes (a, b) the variance is exactly (a²+b²)/2, the covariance
+eigenvalues exactly (b²/2, a²/2), and the top principal direction is the
+long axis (|dot| = 1); a single point has zero spread.
+
 ## QEC diagnostics application layer
 
 `geocore.qec.diagnose` runs the coherent-noise diagnostic over a code
@@ -338,10 +361,13 @@ Done so far — each with machine-precision verification + measured benchmark:
 11. ✅ QEC diagnostics application layer: vectorized sweeps, the
     θ^{d+1} law reproduced to 0.001, leading coefficients to <2%,
     pseudo-threshold exactly π/2 for every distance, verified crossovers.
+12. ✅ Manifold variance/covariance (≈ torch.std + tangent PCA):
+    Frechet variance, orthonormal-frame tangent covariance with
+    tr(Cov) = variance to machine precision, ellipse statistics exact
+    ((a²+b²)/2, (b²/2, a²/2), long-axis direction |dot|=1).
 
 Next candidates (hypotheses to measure, not claims):
-- Manifold variance/covariance (≈ torch.std, via log_map to the tangent
-  space).
+- Documentation site / full walkthrough notebook (all 12 features).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
