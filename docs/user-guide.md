@@ -107,6 +107,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 18 | Real circular data (wind, 3 cities) | — | circular mean matches climate; arithmetic up to 183° off | — |
 | 19 | El Niño/La Niña diagnosis (NOAA ONI) | — | famous peaks reproduced; winter locking verified | — |
 | 20 | ENSO statistical forecast | — | window [2025.1, 2027.8] cross-checked vs official tail | — |
+| 21 | Spectral (geometrized) ENSO forecast | — | period 3.62 yr; backtest ~1.6 yr; forecast 2026.6 | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -144,6 +145,6 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 20 features, 167 tests (incl. ~700 fuzz cases + real-data tests on
+Done: 21 features, 171 tests (incl. ~700 fuzz cases + real-data tests on
 seismicity, wind and ENSO), 12 measured shortcuts (see catalog).  Next
 candidates: documentation hosting.
