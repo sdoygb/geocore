@@ -5,6 +5,8 @@ reference.  Every result is verified to machine precision; every speedup is
 measured.  The derivation engine is the geometry theory; the presentation
 is standard mathematics.
 
+**Project site**: <https://sdoygb.github.io/geocore/> (GitHub Pages).
+
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [The four layers](#the-four-layers)
