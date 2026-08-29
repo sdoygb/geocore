@@ -17,11 +17,15 @@ import numpy as np
 from .clifford import (
     apply_gates_to_pauli,
     bits_to_string,
+    build_clifford_tableau,
+    clifford_tableau_to_matrix,
+    compose_clifford,
+    conjugate_pauli_tableau,
     string_to_bits,
     symplectic_commutes,
 )
 
-__all__ = ["GeometricObject", "Pauli", "Rotation"]
+__all__ = ["GeometricObject", "Pauli", "Rotation", "Clifford"]
 
 
 class GeometricObject:
@@ -76,6 +80,12 @@ class Pauli(GeometricObject):
 
     def to_matrix(self) -> np.ndarray:
         return _pauli_matrix(self.axis)
+
+    def __eq__(self, other):
+        return isinstance(other, Pauli) and self.axis == other.axis
+
+    def __hash__(self):
+        return hash(self.axis)
 
     def __repr__(self):
         return f"Pauli({self.axis!r})"
@@ -132,6 +142,73 @@ class Rotation(GeometricObject):
 
     def verify(self) -> dict:
         return {"ok": True, "note": "rotation closure invariants checked via circuit.optimize"}
+
+
+class Clifford(GeometricObject):
+    """A Clifford group element on n qubits: the symplectic tableau
+    (2n x 2n binary matrix + 2n-bit phase vector, Aaronson-Gottesman).
+
+    Constructed from a gate sequence (names: ``h, s, sd, sx, sxdg, cx``);
+    the tableau rows are the conjugates of the generators.  Composition
+    and Pauli conjugation are binary linear algebra on the tableau; the
+    dense matrix is rebuilt from the tableau for verification (see the
+    ``clifford.compose`` invariant and the tests: tableau vs dense agree
+    to machine precision).
+    """
+
+    __slots__ = ("gates", "n", "_tableau", "_phases")
+
+    def __init__(self, gates, n=None):
+        self.gates = tuple(tuple(g) for g in gates)
+        qubits = [q for g in self.gates for q in g[1:]]
+        self.n = n if n is not None else (max(qubits) + 1 if qubits else 1)
+        self._tableau, self._phases = build_clifford_tableau(self.gates, self.n)
+
+    @classmethod
+    def from_tableau(cls, tableau, phases, n):
+        """Construct directly from a tableau (e.g. the product of a
+        composition) — no gate sequence."""
+        obj = cls.__new__(cls)
+        obj.gates = None
+        obj.n = n
+        obj._tableau = np.asarray(tableau, dtype=int)
+        obj._phases = np.asarray(phases, dtype=int)
+        return obj
+
+    @property
+    def dim(self) -> int:
+        return self.n
+
+    def conjugate(self, pauli: "Pauli") -> tuple["Pauli", int]:
+        """Conjugate a Pauli: P -> C P C^+, returns (Pauli', phase r) with
+        r the sign bit of the result (axis and phase, as in
+        ``pauli.conjugate_by``)."""
+        xp, zp, q = conjugate_pauli_tableau(
+            self._tableau, self._phases, self.n, pauli._x, pauli._z
+        )
+        axis = bits_to_string(xp, zp)
+        m = axis.count("Y")
+        r = ((q - m) // 2) % 2  # full phase i^q = (-1)^r i^m
+        return Pauli(axis), int(r)
+
+    def compose(self, other: "Clifford") -> "Clifford":
+        """Group product C = self @ other (apply other first, then self)."""
+        if other.n != self.n:
+            raise ValueError(f"Clifford qubit mismatch: {self.n} vs {other.n}")
+        t, p = compose_clifford(
+            self._tableau, self._phases, other._tableau, other._phases, self.n
+        )
+        return Clifford.from_tableau(t, p, self.n)
+
+    def to_matrix(self) -> np.ndarray:
+        """Dense 2^n x 2^n matrix rebuilt from the tableau."""
+        return clifford_tableau_to_matrix(self._tableau, self._phases, self.n)
+
+    def verify(self) -> dict:
+        return {"ok": True, "note": "Clifford invariants checked via clifford.compose"}
+
+    def __repr__(self):
+        return f"Clifford(n={self.n}, gates={'x'.join(str(g) for g in self.gates) if self.gates else 'tableau'})"
 
 
 def _pauli_matrix(axis):

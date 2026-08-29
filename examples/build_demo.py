@@ -100,7 +100,7 @@ CODE = {
     "setup": """import numpy as np
 import geocore
 print("geocore", geocore.__version__)""",
-    "l0": """from geocore import Pauli, Rotation, op, get_op
+    "l0": """from geocore import Pauli, Rotation, Clifford, op, get_op
 
 # Pauli: commutation decided by the symplectic form
 print("X,Z commute:", Pauli("X").commutes_with(Pauli("Z")))
@@ -109,7 +109,11 @@ print("XX,ZY commute:", Pauli("XX").commutes_with(Pauli("ZY")))
 # Rotation: closure semantics — same-axis rotations merge
 a, b = Rotation("XX", 0.3), Rotation("XX", 0.4)
 print("merge:", get_op("rotation.merge")(a, b))   # Rotation('XX', 0.7)
-print("cancels at 2pi:", Rotation("XX", 2*np.pi).cancels())""",
+print("cancels at 2pi:", Rotation("XX", 2*np.pi).cancels())
+
+# Clifford: symplectic tableau (composition/conjugation verified vs dense)
+C = Clifford([("cx", (0, 1))], 2)
+print("CX X@I CX+ =", C.conjugate(Pauli("XI")), "  (classic CNOT rule)")""",
     "l0_manifolds": """from geocore import PolarPlane, Sphere, HyperbolicPlane
 
 for M, init, vel in [

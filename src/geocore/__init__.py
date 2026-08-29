@@ -13,7 +13,7 @@ from .hyperbolic import HyperbolicPlane  # noqa: F401
 from .manifolds import PolarPlane  # noqa: F401
 from .spectral import Circle  # noqa: F401
 from .sphere import Sphere  # noqa: F401
-from .objects import Pauli, Rotation  # noqa: F401
+from .objects import Clifford, Pauli, Rotation  # noqa: F401
 from .ops import dispatch, get_op, op  # noqa: F401
 from .optim import RiemannianAdam, RiemannianSGD, BatchOptimizationResult, OptimizationResult, minimize, minimize_batch  # noqa: F401
 from .geostats import frechet_mean, frechet_variance, principal_directions, tangent_covariance  # noqa: F401

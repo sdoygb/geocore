@@ -136,6 +136,8 @@ Key operators in v0.1:
 | `optim.gradient` | (Manifold, df, p) | Riesz duality g(grad f, v) = df(v) |
 | `optim.step` | (Manifold, p, v, lr) | exp-map validity, in-chart, descent |
 | `geodesic.parallel_transport` | (Manifold, p, q, V) | isometry: g_q(V',V') = g_p(V,V) |
+| `clifford.compose` | (Clifford, Clifford) | tableau product == dense product (up to global phase) |
+| `clifford.conjugate` | (Clifford, Pauli) | axis and phase == C P C† as matrices |
 | `geodesic.batch` | (Manifold, P, V, t) | batch == vectorized RK4 (machine precision) |
 | `rotation.derivative` | (Rotation, ψ) | analytic dR/dθ vs finite differences (1e-6) |
 | `geodesic.jacobian` | (Manifold, p, v, t) | analytic Jacobians vs finite differences (1e-6) |

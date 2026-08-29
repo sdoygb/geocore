@@ -127,7 +127,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 118 tests
+└── tests/                   # 132 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -316,6 +316,32 @@ are roots verified by substitution to 1e-10.  The vectorized sweep
 (`logical_error_sweep`) is measured 18.7× faster than the per-point
 closed-form loop (and ~600× vs the O(2^n) state-vector simulation).
 
+## Clifford group elements (L0 extension)
+
+A `Clifford` object on n qubits: the symplectic tableau (2n×2n binary
+matrix + 2n-bit phase, Aaronson-Gottesman), constructed from a gate
+sequence (`h, s, sd, sx, sxdg, cx`).  Composition and Pauli conjugation
+are binary linear algebra on the tableau; the dense matrix is rebuilt
+from the tableau for verification.
+
+```python
+from geocore import Clifford, Pauli
+
+C = Clifford([("cx", (0, 1))], 2)
+C.conjugate(Pauli("XI"))          # (Pauli('XX'), 0) — the classic CNOT rule
+C.compose(C).conjugate(Pauli("XI"))  # group product, verified
+```
+
+Verified (machine precision): tableau vs gates-dense agree to 1e-16 up
+to a global phase (the tableau determines the Clifford only
+projectively — C and e^{iθ}C share a tableau, so the comparison allows
+the 8th-root phase); conjugation (axis and phase) equals C P C† exactly;
+composition equals the dense product up to global phase; associativity
+exact; H² = I, S² = Z; CNOT rules (X⊗I→X⊗X, I⊗Z→Z⊗Z, Y⊗I→Y⊗X) exact.
+The r-bit phase of the existing machinery was extended to the full 2-bit
+phase i^q — the single sign bit cannot track the i carried by Y factors
+in multiplication (caught by the composition verification).
+
 ## Manifolds (all with closed-form geodesics, verified)
 
 | Manifold | Metric | Geodesic (closed form) | Verified truths |
@@ -381,9 +407,12 @@ Done so far — each with machine-precision verification + measured benchmark:
 13. ✅ Spread-ellipse visualization (geocore.viz): the tangent PCA
     ellipse flowed through the exponential map (d(m, exp_m(v)) = |v|_g
     to 1e-15), in each manifold's natural chart.
+14. ✅ Clifford group elements (L0 extension): symplectic tableau with
+    full 2-bit phases, composition/conjugation verified against dense
+    truth (up to the projective global phase).
 
 Next candidates (hypotheses to measure, not claims):
-- New geometric objects (Clifford group elements / circuit objects).
+- Circuit object (gate-list wrapper with optimize + verification).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.

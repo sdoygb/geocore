@@ -100,6 +100,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 10 | Analytic derivatives | autograd | ~1e-10 vs finite diff. | 2,390× / 66,000× (n=8) |
 | 11 | Frechet mean / variance / PCA | torch.mean/std | tr(Cov)=var; ellipse exact | — |
 | 13 | Spread-ellipse visualization | — | exp image faithful to 1e-15 | — |
+| 14 | Clifford group elements | — | tableau vs dense 1e-16 (up to phase) | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -137,6 +138,6 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 13 features, 122 tests, 12 measured shortcuts (see catalog).
-Next candidates: new geometric objects (Clifford group elements / circuit
-objects), documentation site hosting.
+Done: 14 features, 132 tests, 12 measured shortcuts (see catalog).
+Next candidates: circuit object (gate-list wrapper with optimize),
+documentation site hosting.

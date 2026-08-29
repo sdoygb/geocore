@@ -51,8 +51,16 @@ def _gate_matrix(gate, args, n):
         for o in ops[1:]:
             M = np.kron(M, o)
         return M
+    # CNOT on arbitrary (control, target) and n qubits: flip target bit
+    # when the control bit is set (a permutation matrix).
     c, t = args
-    return _CX01 if (c, t) == (0, 1) else _SWAP @ _CX01 @ _SWAP
+    d = 2**n
+    M = np.zeros((d, d), dtype=complex)
+    cbit, tbit = n - 1 - c, n - 1 - t
+    for i in range(d):
+        j = i ^ (1 << tbit) if (i >> cbit) & 1 else i
+        M[j, i] = 1.0
+    return M
 
 
 def check_conjugation_matrix_truth(max_n=3):

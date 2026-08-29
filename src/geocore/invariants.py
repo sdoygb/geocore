@@ -36,6 +36,8 @@ __all__ = [
     "ParallelTransportIsometry",
     "BatchConsistency",
     "DerivativeValidity",
+    "CliffordCompositionTruth",
+    "CliffordConjugationTruth",
     "MergeClosure",
     "CancellationClosure",
     "UnitaryEquivalence",
@@ -368,6 +370,44 @@ class DerivativeValidity(Invariant):
             ok=err < self.atol,
             max_error=err,
             details=f"analytic vs finite-difference max error {err:.2e}",
+        )
+
+
+class CliffordCompositionTruth(Invariant):
+    """clifford.compose: the tableau product equals the dense matrix
+    product C1 @ C2 up to a global phase (the tableau determines the
+    Clifford only projectively; the global phase of a Clifford product is
+    a power of i)."""
+
+    name = "clifford_composition_truth"
+
+    def check(self, result, a, b, **kwargs) -> VerificationReport:
+        from .clifford import matrices_equal_up_to_phase
+
+        ok, err = matrices_equal_up_to_phase(result.to_matrix(), a.to_matrix() @ b.to_matrix())
+        return VerificationReport(
+            ok=ok,
+            max_error=err,
+            details=f"tableau vs dense product (up to global phase) error {err:.2e}",
+        )
+
+
+class CliffordConjugationTruth(Invariant):
+    """clifford.conjugate: the tableau-conjugated Pauli (axis and phase)
+    equals C P C^+ as explicit matrices."""
+
+    name = "clifford_conjugation_truth"
+
+    def check(self, result, clifford, pauli, **kwargs) -> VerificationReport:
+        conj, r = result
+        C = clifford.to_matrix()
+        truth = C @ pauli.to_matrix() @ C.conj().T
+        got = conj.to_matrix() * ((-1) ** r)
+        err = float(np.abs(truth - got).max())
+        return VerificationReport(
+            ok=err < self.atol,
+            max_error=err,
+            details=f"clifford conjugation matrix-truth max error {err:.2e}",
         )
 
 

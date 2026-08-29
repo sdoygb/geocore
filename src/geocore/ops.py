@@ -21,6 +21,8 @@ import numpy as np
 
 from .invariants import (
     CancellationClosure,
+    CliffordCompositionTruth,
+    CliffordConjugationTruth,
     ConjugationMatrixTruth,
     GeodesicEnergyConservation,
     LogicalErrorValidity,
@@ -34,7 +36,7 @@ from .invariants import (
 )
 from .manifolds import PolarPlane
 from .spectral import Circle
-from .objects import Pauli, Rotation
+from .objects import Clifford, Pauli, Rotation
 
 __all__ = ["Operator", "op", "get_op", "registry", "dispatch"]
 
@@ -178,6 +180,37 @@ rotation_merge = op(
 @rotation_merge.register(Rotation, Rotation)
 def _(a: Rotation, b: Rotation):
     return a.merge_with(b)
+
+
+clifford_compose = op(
+    "clifford.compose",
+    invariants=[CliffordCompositionTruth()],
+    theorem=(
+        "Clifford group product: C1 @ C2 is the symplectic composition of "
+        "tableaux with phase propagation (Aaronson-Gottesman); verified "
+        "against the dense matrix product."
+    ),
+)
+
+
+@clifford_compose.register(Clifford, Clifford)
+def _(a: Clifford, b: Clifford):
+    return a.compose(b)
+
+
+clifford_conjugate = op(
+    "clifford.conjugate",
+    invariants=[CliffordConjugationTruth()],
+    theorem=(
+        "Clifford conjugation P -> C P C^+ is a symplectic transformation "
+        "with the r-bit phase tracked exactly (verified vs matrix truth)."
+    ),
+)
+
+
+@clifford_conjugate.register(Clifford, Pauli)
+def _(clifford, pauli):
+    return clifford.conjugate(pauli)
 
 
 rotation_cancel = op(
