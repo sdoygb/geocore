@@ -8,7 +8,7 @@ verified to machine precision (engine-presentation separation).
 
 __version__ = "0.1.0"
 
-from . import clifford, derivatives, hyperbolic, invariants, manifolds, objects, ops, optim, qec, rotations, shortcuts, spectral, sphere, verify  # noqa: F401
+from . import clifford, derivatives, geostats, hyperbolic, invariants, manifolds, objects, ops, optim, qec, rotations, shortcuts, spectral, sphere, verify  # noqa: F401
 from .hyperbolic import HyperbolicPlane  # noqa: F401
 from .manifolds import PolarPlane  # noqa: F401
 from .spectral import Circle  # noqa: F401
@@ -21,6 +21,7 @@ from .rotations import optimize_pauli_rotations  # noqa: F401
 __all__ = [
     "clifford",
     "derivatives",
+    "geostats",
     "hyperbolic",
     "invariants",
     "manifolds",

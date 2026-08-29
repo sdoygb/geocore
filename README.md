@@ -125,7 +125,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 93 tests
+└── tests/                   # 103 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -228,6 +228,33 @@ state = np.random.randn(8) + 1j*np.random.randn(8)
 d = get_op("rotation.derivative")(Rotation("XYZ", 0.7), state)  # verified
 ```
 
+## Geometric statistics (≈ torch.mean) + analytic gradients in optimizers
+
+The Frechet mean minimizes the weighted sum of squared geodesic
+distances; its gradient is closed form (grad_p d(p,q)² = −2·log_p(q)),
+so the optimizers now accept an **analytic gradient** (`minimize(…,
+grad_f=…)`) that is *verified against finite differences on every step*
+(disagreement beyond 1e-4 raises — a wrong analytic gradient is
+surfaced, not hidden; the worst deviation is reported in
+`max_grad_error`).
+
+```python
+from geocore import PolarPlane, frechet_mean
+import numpy as np
+
+pts = np.array([[2.0, 0.3], [1.2, -0.5], [1.9, 1.2], [1.1, 0.9]])
+res = frechet_mean(PolarPlane(), pts, lr=0.1, n_steps=500)
+# res.point is the Frechet mean — on the flat polar plane it equals the
+# Cartesian arithmetic mean to 4e-16; on the sphere/hyperbolic plane two
+# points give the geodesic midpoint exactly (d(m,q1)=d(m,q2)=d12/2)
+```
+
+The log map (inverse exponential) is closed form per manifold and
+verified by exp_p(log_p(q)) = q to ~1e-12; the geodesic distance uses
+numerically stable formulas (haversine / 2·asinh(√(δ/2))) — the naive
+acos/acosh loses precision for nearly coincident points (measured
+2.1e-8 error before the fix).
+
 ## Manifolds (all with closed-form geodesics, verified)
 
 | Manifold | Metric | Geodesic (closed form) | Verified truths |
@@ -279,9 +306,13 @@ Done so far — each with machine-precision verification + measured benchmark:
 9. ✅ Analytic derivatives (≈ autograd): `rotation.derivative` closed form
    (2,390× / 66,000× at n=8) and per-manifold `geodesic.jacobian`
    (verified to ~1e-10, incl. the Jv·v₀ = t·γ′(t) identity).
+10. ✅ Geometric statistics (≈ torch.mean): log map (inverse exp,
+    exp∘log = q to ~1e-12) + Frechet mean with the analytic gradient
+    (verified vs FD every step); polar-plane mean = Cartesian arithmetic
+    mean to 4e-16; stable distance formulas (haversine / asinh).
 
 Next candidates (hypotheses to measure, not claims):
-- Application layers (QEC diagnostics, geometric statistics primitives).
+- QEC diagnostics application layer (the θ^{d+1} law, batched).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.

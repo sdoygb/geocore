@@ -48,6 +48,7 @@ class OptimizationResult:
     final_grad_norm: float
     minimizer_error: float | None = None
     n_steps: int = 0
+    max_grad_error: float | None = None  # analytic vs FD gradient, when grad_f given
 
     def __repr__(self):
         return (
@@ -302,6 +303,8 @@ def minimize(
     optimizer: str = "sgd",
     betas=(0.9, 0.999),
     eps: float = 1e-8,
+    grad_f=None,
+    verify_grad: bool = True,
 ) -> OptimizationResult:
     """Minimize f on the manifold by Riemannian gradient descent.
 
@@ -319,6 +322,13 @@ def minimize(
         (True) or the generic RK4 path (False, for benchmarking/verification)
     optimizer : "sgd" (RiemannianSGD) or "adam" (RiemannianAdam)
     betas, eps : Adam hyperparameters
+    grad_f : optional analytic Riemannian gradient, grad_f(p) -> tangent
+        vector (the analogue of a user-supplied autograd gradient).  When
+        given, it replaces the finite-difference gradient and is *verified*
+        against finite differences on every step; the worst deviation is
+        reported in ``max_grad_error``, and a disagreement beyond 1e-4
+        raises (your analytic gradient is wrong — surfaced, not hidden).
+    verify_grad : verify grad_f against finite differences (default True)
 
     Every step is verified (exp-map validity, manifold constraint, and for
     SGD with zero momentum the descent against f); moment buffers are
@@ -336,15 +346,33 @@ def minimize(
     trajectory = [point.copy()]
     f_history = [float(f(point))]
     descent_ok = True
+    max_grad_error = 0.0
     for _ in range(n_steps):
-        df = _central_difference(f, point)
-        grad = optim_gradient(manifold, df, point)
+        if grad_f is not None:
+            grad = np.asarray(grad_f(point), dtype=float)
+            if verify_grad:
+                df = _central_difference(f, point)
+                g0, g1 = manifold.metric_diag(point)
+                grad_fd = np.array([df[0] / g0, df[1] / g1])
+                max_grad_error = max(
+                    max_grad_error, float(np.abs(grad - grad_fd).max())
+                )
+        else:
+            df = _central_difference(f, point)
+            grad = optim_gradient(manifold, df, point)
         new_point = opt.step(point, grad, f=f, use_shortcut=use_shortcut)
         if float(f(new_point)) > float(f(point)) + 1e-7:
             descent_ok = False
         point = new_point
         trajectory.append(point.copy())
         f_history.append(float(f(point)))
+    if grad_f is not None and verify_grad and max_grad_error > 1e-4:
+        from .invariants import VerificationError
+
+        raise VerificationError(
+            f"analytic gradient disagrees with finite differences "
+            f"(max error {max_grad_error:.2e} > 1e-4)"
+        )
     df_final = _central_difference(f, point)
     grad_final = optim_gradient(manifold, df_final, point)
     grad_norm = float(
@@ -363,4 +391,5 @@ def minimize(
         final_grad_norm=grad_norm,
         minimizer_error=minimizer_error,
         n_steps=n_steps,
+        max_grad_error=max_grad_error if grad_f is not None else None,
     )

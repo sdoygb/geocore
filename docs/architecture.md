@@ -139,6 +139,7 @@ Key operators in v0.1:
 | `geodesic.batch` | (Manifold, P, V, t) | batch == vectorized RK4 (machine precision) |
 | `rotation.derivative` | (Rotation, ψ) | analytic dR/dθ vs finite differences (1e-6) |
 | `geodesic.jacobian` | (Manifold, p, v, t) | analytic Jacobians vs finite differences (1e-6) |
+| `optim.gradient` + `minimize(grad_f=…)` | analytic Riemannian gradient | verified vs finite differences every step (1e-4) |
 
 ## Layer 2 — Automatic verification (≈ `autograd`)
 

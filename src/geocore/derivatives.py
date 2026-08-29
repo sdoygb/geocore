@@ -32,6 +32,10 @@ __all__ = [
     "polar_jacobian",
     "sphere_jacobian",
     "hyperbolic_jacobian",
+    "log_map",
+    "polar_log_map",
+    "sphere_log_map",
+    "hyperbolic_log_map",
 ]
 
 
@@ -215,3 +219,90 @@ def geodesic_jacobian(manifold, initial, velocity, t):
     if name == "HyperbolicPlane":
         return hyperbolic_jacobian(initial, velocity, t)
     raise NotImplementedError(f"geodesic_jacobian: unknown manifold {name}")
+
+
+# ---------------------------------------------------------------------------
+# Logarithmic map: the inverse of the exponential map.
+#
+# log_p(q) is the tangent vector at p whose exponential is q.  It is the
+# closed form behind the gradient of the squared geodesic distance:
+#   grad_p d(p, q)^2 = -2 log_p(q)
+# so it is what makes analytic gradients of distance-based potentials
+# (e.g. Frechet means) available to the optimizers.
+# ---------------------------------------------------------------------------
+
+
+def polar_log_map(point, target):
+    """log_p(q) on the polar plane: the Cartesian displacement
+    q - p expressed in the polar frame at p (the plane is flat)."""
+    r0, y0 = float(point[0]), float(point[1])
+    r1, y1 = float(target[0]), float(target[1])
+    vx = r1 * np.cos(y1) - r0 * np.cos(y0)
+    vy = r1 * np.sin(y1) - r0 * np.sin(y0)
+    v_r = vx * np.cos(y0) + vy * np.sin(y0)
+    v_y = (-vx * np.sin(y0) + vy * np.cos(y0)) / r0
+    return np.array([v_r, v_y])
+
+
+def sphere_log_map(point, target):
+    """log_p(q) on the sphere: the great-circle tangent at p pointing at q,
+    of length d(p, q) — (d/sin d)(q - p cos d) in the embedding, expressed
+    in the spherical frame at p."""
+    th0, ph0 = float(point[0]), float(point[1])
+    th1, ph1 = float(target[0]), float(target[1])
+    st, ct = np.sin(th0), np.cos(th0)
+    p = np.array([st * np.cos(ph0), st * np.sin(ph0), ct])
+    st1, ct1 = np.sin(th1), np.cos(th1)
+    q = np.array([st1 * np.cos(ph1), st1 * np.sin(ph1), ct1])
+    cos_d = float(np.clip(p @ q, -1.0, 1.0))
+    if cos_d <= -1.0 + 1e-12:
+        raise ValueError("sphere_log_map: antipodal points (log undefined)")
+    d = np.arccos(cos_d)
+    if d < 1e-12:
+        return np.zeros(2)
+    v_emb = (d / np.sin(d)) * (q - p * cos_d)
+    e_th = np.array([ct * np.cos(ph0), ct * np.sin(ph0), -st])
+    e_ph = np.array([-st * np.sin(ph0), st * np.cos(ph0), 0.0])
+    return np.array([float(v_emb @ e_th), float(v_emb @ e_ph) / (st * st)])
+
+
+def hyperbolic_log_map(point, target):
+    """log_p(q) on the hyperbolic plane: the semicircle tangent at p
+    pointing at q, of length d(p, q) = acosh(1 + |p-q|^2/(2 y0 y1)).
+
+    Along the geodesic circle of center (c, 0) and radius R with angle
+    psi (p = (c + R cos psi, R sin psi)), the unit-speed tangent in the
+    direction of increasing psi is (-R sin^2 psi, R sin psi cos psi);
+    the sign is chosen toward the target, and the length is the distance.
+    """
+    x0, y0 = float(point[0]), float(point[1])
+    xt, yt = float(target[0]), float(target[1])
+    if abs(x0 - xt) < 1e-15:
+        return np.array([0.0, y0 * np.log(yt / y0)])
+    c = (x0 * x0 + y0 * y0 - xt * xt - yt * yt) / (2.0 * (x0 - xt))
+    R = np.sqrt((x0 - c) ** 2 + y0 * y0)
+    psi0 = np.arctan2(y0, x0 - c)
+    psit = np.arctan2(yt, xt - c)
+    dpsi = (psit - psi0 + np.pi) % (2.0 * np.pi) - np.pi  # short arc
+    d = np.arccosh(
+        1.0 + ((x0 - xt) ** 2 + (y0 - yt) ** 2) / (2.0 * y0 * yt)
+    )
+    if abs(d) < 1e-12:
+        return np.zeros(2)
+    sin0, cos0 = y0 / R, (x0 - c) / R
+    v_unit = np.array([-R * sin0 * sin0, R * sin0 * cos0])
+    return d * np.sign(dpsi) * v_unit
+
+
+def log_map(manifold, point, target):
+    """The inverse exponential map log_p(q): the tangent vector at p whose
+    exponential is q.  Verified by exp_p(log_p(q)) = q to machine
+    precision (see tests)."""
+    name = type(manifold).__name__
+    if name == "PolarPlane":
+        return polar_log_map(point, target)
+    if name == "Sphere":
+        return sphere_log_map(point, target)
+    if name == "HyperbolicPlane":
+        return hyperbolic_log_map(point, target)
+    raise NotImplementedError(f"log_map: unknown manifold {name}")
