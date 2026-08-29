@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 231 tests
+└── tests/                   # 237 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -700,6 +700,35 @@ a particular circuit; honest framing as before — a root analysis with
 exact closed forms, not a claimed full solution of NISQ error
 mitigation.
 
+### Quantum: non-depolarizing noise (`examples/vqe_noise_non_depolarizing.py`)
+
+What breaks and what survives when the affine structure of the
+depolarizing channel (feature 34) is gone.  Three noise channels, three
+geometric fingerprints, all machine-verified (SLD-QFI, Bell state):
+
+```
+[1] Amplitude damping: energy track is BASIS-DEPENDENT
+      H=XX (coherent)  : linear ZNE err 3.3e-16  (exactly linear!)
+      H=ZZ (population): linear ZNE err 3.2e-2   (g^2 double-decay)
+[2] Metric fingerprint: SLD-QFI contraction
+      depolarizing: ratios 0.5765..0.5765  scalar (closed form)
+      amp. damping: ratios 0.7000..0.7000  scalar (1-g), machine prec.
+      phase damping: ratios 0.7000..1.0000  ANISOTROPIC
+[3] Natural gradient under AD: immune on coherent terms ((1-g)/(1-g)),
+    NOT immune on population terms (1/(1-g)=1.43) — basis-dependent
+[4] Pauli twirl of AD: population ZNE err 3.2e-2 -> 1.6e-2 (shrinks,
+    does not remove the g^2 residual); coherent stays exact
+[5] Variational bound Tr(rho H) >= E_gs survives any CPTP noise
+```
+
+The surprise: amplitude damping — the physically dominant T1
+relaxation — has a *scalar* QFI contraction (1−g) to machine precision,
+even on anisotropic circuits, yet its energy track is basis-dependent;
+phase damping is the anisotropic one.  Linear ZNE is exact for AD on
+coherent terms and has O(g²) error on population terms.  Honest
+framing: a root classification of channels by fingerprint, not a
+claimed full solution of NISQ mitigation.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -947,11 +976,16 @@ Done so far — each with machine-precision verification + measured benchmark:
     c(λ)=(1−λ)²/(1−λ+2λ/2ⁿ) (1e-15); natural gradient immune to
     O(1/d); variational bound survives, SGD optimum pulled (Adam
     masks it); ZNE order = number of noise points.
+35. ✅ Quantum: non-depolarizing noise geometry — three channels,
+    three fingerprints: amplitude damping has SCALAR QFI contraction
+    (1−γ) but basis-dependent energy track (coherent linear / 
+    population g²); phase damping ANISOTROPIC; Pauli twirl shrinks
+    (not removes) the population residual; bound survives any CPTP.
 
 Next candidates (hypotheses to measure, not claims):
 - QAOA (MaxCut) — combinatorial optimization on the same pipeline.
-- Non-depolarizing noise (amplitude damping / coherent) — the affine
-  structure breaks; measure what survives.
+- Coherent (unitary) rotation noise — no mixing, pure-state QFI
+  structure, sin²(θ/2) tracks.
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
