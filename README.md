@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 277 tests
+└── tests/                   # 281 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -881,6 +881,28 @@ Zero-gradient discrete evolution on the diagonal→full path:
 The first real molecule beyond the 2-qubit H2 reduction, solved with
 zero gradients (the plateau never enters).  Requires openfermion.
 
+### Quantum: input universality (`examples/vqe_molecule_universal.py`)
+
+The SAME zero-gradient pipeline (openfermion JW → diagonal→full
+adiabatic, zero hand-tuning) on any molecular input:
+
+```
+    system    nq   E_exact      E_evolved    err Ha   fid
+    H2 0.735   4   -1.137306    -1.135138    +0.0022  0.999
+    LiH 1.3   12   -7.869140    -7.867632    +0.0015  0.998  CHEM ACC
+    LiH 1.6   12   -7.882324    -7.881050    +0.0013  0.998  CHEM ACC
+    LiH 2.0   12   -7.861088    -7.860036    +0.0011  0.997  CHEM ACC
+    H2O       14  -75.012437   -74.961190    +0.0512  0.992
+```
+
+LiH at three bond lengths inside chemical accuracy with the same
+pipeline (input universality: different molecules, different
+geometries, zero tuning).  Particle-number sector automatic (N=2/4/10).
+Honest boundary: H2O runs automatically (JW exact, fidelity 0.992) but
+the diagonal→full path plateaus above chemical accuracy (N=10, S=0
+sectors verified correct — the plateau is adiabatic-path quality,
+system-dependent); absolute universality is not claimed.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -1171,13 +1193,20 @@ Done so far — each with machine-precision verification + measured benchmark:
     extension beyond the 2-qubit H2 reduction.  Debugged: JW qubit
     order (big-endian, no flip), the constant double-count, and the
     N=2 sector projection.
+ 42. ✅ Quantum: input universality — the SAME zero-gradient pipeline
+     (JW → diagonal→full adiabatic, zero tuning) on any molecule:
+     LiH at 3 bond lengths inside chemical accuracy (1.1-1.5e-3 Ha),
+     H2 near (2.2e-3), particle-number sector automatic (N=2/4/10);
+     H2O is the honest boundary (fid 0.992, plateau above chemical
+     accuracy — adiabatic-path quality, sectors correct).
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,
   with the intermediate regimes (mixed coherent + depolarizing).
 - QAOA parameter transfer: train on small n, apply to large n
   (transferability measured, since concentration is family-dependent).
-- LiH at larger basis / bond-length scan (the potential curve).
+- Better adiabatic paths for the H2O-type plateau (the honest
+  boundary of the input-universal pipeline).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
