@@ -129,7 +129,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 159 tests
+└── tests/                   # 163 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -386,6 +386,25 @@ Tokyo/Beijing, an easterly regime for Sydney in January).  The same
 module handled S² seismicity and S¹ wind directions correctly — the
 dynamic-capability check on real, differently-shaped data.
 
+### Real data: El Niño / La Niña (NOAA ONI 1950–2026)
+
+`examples/enso.py` detects ENSO events with the standard criterion
+(|ONI| ≥ 0.5 for ≥ 5 seasons) and analyzes the phase space with the
+geocore statistics pipeline:
+
+```
+top El Nino  : 2014-16 (2.59), 1997-98 (2.37), 1982-83 (2.14) — matches NOAA
+top La Nina  : 1973-74 (-2.04), 1988-89 (-1.85), 2007-08 (-1.76)
+phase locking: |ONI| peaks in December (boreal winter) — verified
+phase space  : El Nino centroid (+1.04, +0.03), neutral (-0.02, 0.00),
+               La Nina (-0.91, -0.02) — the three regimes separate cleanly
+```
+
+The ONI is NOAA's product (we use it, not rebuild it); our contribution
+is the verified detection logic and the geometric phase-space view.
+Event detection caught a real bug in its own first version (runs
+starting from neutral were never recorded — fixed).
+
 ## Circuit object
 
 A `Circuit` is a gate sequence of Clifford gates (`h, s, sd, sx, sxdg,
@@ -522,6 +541,9 @@ Done so far — each with machine-precision verification + measured benchmark:
     correct circular mean on bimodal wind data (arithmetic mean up to
     183° off; geometric matches climate — NW monsoons, easterly
     Sydney).
+19. ✅ El Niño/La Niña diagnosis (NOAA ONI 1950-2026): event detection
+    reproduces the famous peaks (2015-16: 2.59, 1997-98: 2.37); winter
+    phase-locking verified; phase-space regimes separate.
 
 Next candidates (hypotheses to measure, not claims):
 - Documentation hosting (GitHub Pages).
