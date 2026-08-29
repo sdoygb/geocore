@@ -845,11 +845,14 @@ discrete dynamic evolution does not enter that framework at all.
 The solver's scaling law and molecular reach (feature 40):
 
 ```
-[A] Ising: gap Delta ~ 3/n (n*Delta = 2.78, 2.89, 2.95, 2.99, 3.01
-    for n=4..12); adiabatic time T_req(0.90) * Delta^2 ~ 13-25 ->
-    T ~ O(n^2): polynomial, NOT the exponential of the plateau
-    (odd n: the transverse-field path has a spurious degeneracy at
-    s=0.5 where the X terms cancel — honest limitation)
+[A] Ising: gap Delta ~ 3/n (n*Delta = 2.78..3.01 for n=4..12);
+    adiabatic time T_req(0.90) * Delta^2 ~ 13-25 -> T ~ O(n^2):
+    polynomial, NOT the exponential of the plateau
+    (odd/even difference = spatial property: the alternating order
+    has a frustrated boundary on odd chains, <Z0 Z_{n-1}> > 0, which
+    puts the ground state in the Z2-ODD sector — the |+>-based path
+    is symmetry-forbidden (fid = 0 exactly); the symmetry-reduced
+    path converges to 1.000, tested)
 [B] H2 molecule (STO-3G): discrete adiabatic from the HF-like
     diagonal state |01> -> exact ground state: fidelity 0.9999,
     energy err +0.0001 Ha — 16x inside chemical accuracy (1.6e-3),
@@ -1139,8 +1142,10 @@ Done so far — each with machine-precision verification + measured benchmark:
 40. ✅ Quantum: evolution scaling + molecule — Ising gap Δ~3/n
     (nΔ→3.0), T_req~O(n²) (T·Δ²~13-25, polynomial not exponential);
     H2 molecule converges to chemical accuracy (err 1e-4 Ha, 16x
-    inside 1.6e-3) with zero gradients.  Honest: odd-n path has a
-    spurious s=0.5 degeneracy; H2 is the 2-qubit reduction.
+    inside 1.6e-3) with zero gradients.  Odd/even n diagnosed as a
+    spatial property: frustrated boundary on odd chains (<Z0 Z_{n-1}>
+    > 0) puts the GS in the Z2-odd sector, |+>-path symmetry-
+    forbidden (fid 0); symmetry-reduced path fixes it (fid 1.000).
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,

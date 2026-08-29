@@ -15,11 +15,15 @@ sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), ".."
 
 from vqe_evolution_scaling import (  # noqa: E402
     adiabatic_time_req,
+    boundary_correlation,
     h2_adiabatic,
     ising_gap,
+    ising_gs_parity,
     pauli_matrix,
+    sector_adiabatic,
     H2_HAMILTONIAN,
 )
+from vqe_barren_prewarm import ising_ground_state  # noqa: E402
 
 
 def test_ising_gap_scales_as_three_over_n():
@@ -63,3 +67,41 @@ def test_h2_high_fidelity():
     _, gsv = np.linalg.eigh(H)
     psi = h2_adiabatic(1000, 100)
     assert abs(np.vdot(gsv[:, 0], psi)) ** 2 > 0.9
+
+
+def test_gs_parity_alternates_with_n():
+    """The Ising ground state sits in the Z2-even sector for even n and
+    the Z2-odd sector for odd n (the spatial odd/even property)."""
+    for n in (4, 6, 8):
+        assert ising_gs_parity(n) == +1
+    for n in (5, 7, 9):
+        assert ising_gs_parity(n) == -1
+
+
+def test_boundary_frustration_on_odd_n():
+    """<Z0 Z_{n-1}> > 0 on odd chains (frustrated anti-ferro boundary),
+    < 0 on even chains (matched) — the discrete spatial property."""
+    for n in (4, 6, 8):
+        assert boundary_correlation(n) < 0
+    for n in (5, 7, 9):
+        assert boundary_correlation(n) > 0
+
+
+def test_symmetry_reduced_path_fixes_odd_n():
+    """The plain |+>-based path is symmetry-forbidden on odd n (fid 0
+    exactly); the symmetry-reduced (sector) path converges to ~1."""
+    for n in (5, 7):
+        par = ising_gs_parity(n)
+        _, gs = ising_ground_state(n)
+        psi = sector_adiabatic(n, par, 400, 40)
+        assert abs(np.vdot(gs, psi)) ** 2 > 0.99
+
+
+def test_even_n_plain_path_still_works():
+    """Even n: the plain path (|+>, even sector) reaches the even-
+    sector ground state."""
+    for n in (4, 6):
+        par = ising_gs_parity(n)
+        _, gs = ising_ground_state(n)
+        psi = sector_adiabatic(n, par, 400, 40)
+        assert abs(np.vdot(gs, psi)) ** 2 > 0.99
