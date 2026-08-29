@@ -845,14 +845,15 @@ discrete dynamic evolution does not enter that framework at all.
 The solver's scaling law and molecular reach (feature 40):
 
 ```
-[A] Ising: gap Delta ~ 3/n (n*Delta = 2.78..3.01 for n=4..12);
-    adiabatic time T_req(0.90) * Delta^2 ~ 13-25 -> T ~ O(n^2):
-    polynomial, NOT the exponential of the plateau
-    (odd/even difference = spatial property: the alternating order
-    has a frustrated boundary on odd chains, <Z0 Z_{n-1}> > 0, which
-    puts the ground state in the Z2-ODD sector — the |+>-based path
-    is symmetry-forbidden (fid = 0 exactly); the symmetry-reduced
-    path converges to 1.000, tested)
+[A] Ising: gap Delta ~ 3/n (n*Delta -> 3.0); unified sector-pure
+    path (Sigma-ZZ -> Ising, alternating init in the GS Z2 sector)
+    works for ODD and EVEN n: T_req(0.90) = 3.2, 6.4, 12.8, 25.6
+    (n=4, 6, 10, 12) -> T ~ O(n^2), polynomial, NOT exponential.
+    The odd/even difference is a spatial property: the frustrated
+    boundary on odd chains (<Z0 Z_{n-1}> > 0) puts the GS in the
+    Z2-odd sector; a |+>-based path is symmetry-forbidden (fid 0),
+    the pure-sector init fixes it with the SAME Pauli-Trotter cost.
+    Fidelity: n=5 0.991, n=7 0.986, n=12 0.972, n=14 0.966.
 [B] H2 molecule (STO-3G): discrete adiabatic from the HF-like
     diagonal state |01> -> exact ground state: fidelity 0.9999,
     energy err +0.0001 Ha — 16x inside chemical accuracy (1.6e-3),
@@ -1140,12 +1141,12 @@ Done so far — each with machine-precision verification + measured benchmark:
     gradient HEA is barren and stuck (gradient 3.5e-5 at n=12).
     The plateau never enters because there is no gradient.
 40. ✅ Quantum: evolution scaling + molecule — Ising gap Δ~3/n
-    (nΔ→3.0), T_req~O(n²) (T·Δ²~13-25, polynomial not exponential);
-    H2 molecule converges to chemical accuracy (err 1e-4 Ha, 16x
-    inside 1.6e-3) with zero gradients.  Odd/even n diagnosed as a
-    spatial property: frustrated boundary on odd chains (<Z0 Z_{n-1}>
-    > 0) puts the GS in the Z2-odd sector, |+>-path symmetry-
-    forbidden (fid 0); symmetry-reduced path fixes it (fid 1.000).
+    (nΔ→3.0), unified sector-pure path (odd+even) T_req~O(n²) with
+    Pauli-Trotter cost (fid 0.99 n=5,7; 0.97 n=12; 0.966 n=14); H2
+    molecule to chemical accuracy (err 1e-4 Ha) zero-gradient.
+    Odd/even diagnosed as a spatial property (frustrated boundary →
+    Z2-odd sector → |+> symmetry-forbidden); pure-sector init fixes
+    it at scale.
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,

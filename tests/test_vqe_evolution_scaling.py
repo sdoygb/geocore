@@ -21,9 +21,13 @@ from vqe_evolution_scaling import (  # noqa: E402
     ising_gs_parity,
     pauli_matrix,
     sector_adiabatic,
+    sector_alternating_init,
+    sector_pure_evolution,
     H2_HAMILTONIAN,
 )
 from vqe_barren_prewarm import ising_ground_state  # noqa: E402
+from vqe_discrete_evolution import diag_values  # noqa: E402
+from vqe_barren_plateaus import ising_hamiltonian  # noqa: E402
 
 
 def test_ising_gap_scales_as_three_over_n():
@@ -105,3 +109,37 @@ def test_even_n_plain_path_still_works():
         _, gs = ising_ground_state(n)
         psi = sector_adiabatic(n, par, 400, 40)
         assert abs(np.vdot(gs, psi)) ** 2 > 0.99
+
+
+def test_unified_sector_pure_path_odd_and_even():
+    """The sector-pure Pauli-Trotter path (Sigma-ZZ -> Ising) works for
+    BOTH odd and even n at scale — the fix of the symmetry-forbidden
+    case without matrix projection."""
+    for n in (5, 6, 7, 10):
+        _, gs = ising_ground_state(n)
+        C = diag_values(n, ising_hamiltonian(n))
+        par = ising_gs_parity(n)
+        init = sector_alternating_init(n, par)
+        psi = sector_pure_evolution(n, 1000, 100, C, init)
+        assert abs(np.vdot(gs, psi)) ** 2 > 0.90
+
+
+def test_unified_path_scales_to_n14():
+    """The unified path keeps fidelity > 0.9 at n=12 and n=14."""
+    for n in (12, 14):
+        _, gs = ising_ground_state(n)
+        C = diag_values(n, ising_hamiltonian(n))
+        par = ising_gs_parity(n)
+        init = sector_alternating_init(n, par)
+        psi = sector_pure_evolution(n, 1000, 100, C, init)
+        assert abs(np.vdot(gs, psi)) ** 2 > 0.90
+
+
+def test_unified_adiabatic_time_polynomial():
+    """The unified-path T_req grows polynomially (3.2 at n=4 to 25.6
+    at n=12 — ~n^2, far below 2^n), for odd and even n alike."""
+    T4 = adiabatic_time_req(4)
+    T12 = adiabatic_time_req(12)
+    assert T4 is not None and T12 is not None
+    assert T12 / T4 < 32          # ~8x for 3x the size (not 2^8)
+    assert adiabatic_time_req(5) is not None   # odd n now works too
