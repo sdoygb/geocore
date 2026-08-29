@@ -19,7 +19,7 @@ import numpy as np
 
 from .objects import GeometricObject
 
-__all__ = ["RiemannianManifold", "PolarPlane", "GeodesicSolution"]
+__all__ = ["RiemannianManifold", "PolarPlane", "EuclideanSpace", "GeodesicSolution"]
 
 
 class GeodesicSolution:
@@ -234,3 +234,61 @@ class PolarPlane(RiemannianManifold):
 
     def __repr__(self):
         return "PolarPlane(ds^2 = dr^2 + r^2 dy^2)"
+
+
+class EuclideanSpace(RiemannianManifold):
+    """R^n with the standard metric — the flat N-dimensional parameter
+    space (the natural home of high-dimensional optimization and
+    classification).
+
+    Geodesics are straight lines (no integration), parallel transport is
+    the identity, and the chart covers everything.  This is what makes
+    the geocore optimizers work on arbitrary-dimensional problems, not
+    just the 2-d manifolds.
+    """
+
+    def __init__(self, n: int = 2):
+        self._n = int(n)
+        if self._n < 1:
+            raise ValueError("EuclideanSpace needs n >= 1")
+
+    @property
+    def dim(self) -> int:
+        return self._n
+
+    def metric_diag(self, point):
+        p = np.asarray(point, dtype=float)
+        return np.ones(p.shape[:-1] + (self._n,)) if p.ndim > 1 else np.ones(self._n)
+
+    def metric_norm_sq(self, point, velocity):
+        v = np.asarray(velocity, dtype=float)
+        return np.sum(v * v, axis=-1)
+
+    def in_chart(self, point) -> bool:
+        return True
+
+    def geodesic_ode(self, state):
+        """d/dt [x, v] = [v, 0]: straight-line geodesics."""
+        v = state[..., self._n:]
+        z = np.zeros_like(v)
+        return np.concatenate([v, z], axis=-1)
+
+    def geodesic_closed_form(self, initial, velocity, t):
+        p = np.asarray(initial, dtype=float) + t * np.asarray(velocity, dtype=float)
+        return GeodesicSolution(p, np.asarray(velocity, dtype=float))
+
+    def geodesic_closed_form_batch(self, initial, velocity, t):
+        init = np.atleast_2d(np.asarray(initial, dtype=float))
+        vel = np.atleast_2d(np.asarray(velocity, dtype=float))
+        B = init.shape[0]
+        t = np.broadcast_to(np.asarray(t, dtype=float), (B,))[:, None]
+        return init + t * vel, np.broadcast_to(vel, init.shape)
+
+    def parallel_transport(self, point_from, point_to, vector):
+        return np.asarray(vector, dtype=float).copy()
+
+    def parallel_transport_batch(self, point_from, point_to, vector):
+        return np.asarray(vector, dtype=float).copy()
+
+    def __repr__(self):
+        return f"EuclideanSpace(n={self._n})"

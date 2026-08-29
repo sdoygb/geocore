@@ -60,12 +60,15 @@ class OptimizationResult:
 
 
 def _central_difference(f, point, eps=1e-6):
-    """Euclidean-coordinate covector df = (df/dr, df/dy) by central
-    differences (the generic numerical path)."""
-    r, y = float(point[0]), float(point[1])
-    dfdr = (f([r + eps, y]) - f([r - eps, y])) / (2 * eps)
-    dfdy = (f([r, y + eps]) - f([r, y - eps])) / (2 * eps)
-    return np.array([dfdr, dfdy])
+    """Euclidean-coordinate covector df by central differences (the
+    generic numerical path), for any dimension."""
+    p = np.asarray(point, dtype=float)
+    df = np.empty_like(p)
+    for j in range(len(p)):
+        dp = np.zeros_like(p)
+        dp[j] = eps
+        df[j] = (f(p + dp) - f(p - dp)) / (2 * eps)
+    return df
 
 
 class RiemannianSGD(GeometricObject):
@@ -86,11 +89,11 @@ class RiemannianSGD(GeometricObject):
         self.manifold = manifold
         self.lr = float(lr)
         self.momentum = float(momentum)
-        self.velocity = np.zeros(2)
+        self.velocity = np.zeros(manifold.dim)
 
     def zero_grad(self):
         """Reset the momentum buffer (analogue of SGD.zero_grad)."""
-        self.velocity = np.zeros(2)
+        self.velocity = np.zeros(self.manifold.dim)
 
     def step(self, point, grad, f=None, use_shortcut=True) -> np.ndarray:
         """One optimizer step: update the momentum buffer and move along
@@ -147,14 +150,14 @@ class RiemannianAdam(GeometricObject):
         self.lr = float(lr)
         self.betas = tuple(betas)
         self.eps = float(eps)
-        self.m = np.zeros(2)
-        self.v = np.zeros(2)
+        self.m = np.zeros(manifold.dim)
+        self.v = np.zeros(manifold.dim)
         self.t = 0
 
     def zero_grad(self):
         """Reset the moment buffers and the step counter."""
-        self.m = np.zeros(2)
-        self.v = np.zeros(2)
+        self.m = np.zeros(self.manifold.dim)
+        self.v = np.zeros(self.manifold.dim)
         self.t = 0
 
     def step(self, point, grad, f=None, use_shortcut=True) -> np.ndarray:

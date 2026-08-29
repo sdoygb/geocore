@@ -355,8 +355,8 @@ optim_gradient = op(
 @optim_gradient.register_default
 def _(manifold, df, point, **kwargs):
     df = np.asarray(df, dtype=float)
-    g0, g1 = manifold.metric_diag(np.asarray(point, dtype=float))
-    return np.array([df[0] / g0, df[1] / g1])
+    g = np.asarray(manifold.metric_diag(np.asarray(point, dtype=float)))
+    return df / g
 
 
 optim_step = op(

@@ -263,6 +263,56 @@ def main():
     print(f"discrete-vs-continuum error: {err_s:.3f} (converges O(1/N^2))")
 
 
+def highdim_logistic_torch(d=10, n=500, seed=0):
+    import torch
+
+    torch.manual_seed(seed)
+    rng = np.random.default_rng(seed)
+    X = rng.standard_normal((n, d))
+    w_star = rng.standard_normal(d)
+    b_star = 0.5
+    y = (X @ w_star + b_star > 0).astype(np.float32)
+    Xt = torch.tensor(X.tolist())
+    yt = torch.tensor(y.tolist()).unsqueeze(1)
+    model = torch.nn.Linear(d, 1)
+    opt = torch.optim.Adam(model.parameters(), lr=0.05)
+    loss_fn = torch.nn.BCEWithLogitsLoss()
+    for _ in range(500):
+        opt.zero_grad()
+        loss = loss_fn(model(Xt), yt)
+        loss.backward()
+        opt.step()
+    with torch.no_grad():
+        pred = (model(Xt) > 0).squeeze(1).float()
+    acc = float((pred == yt.squeeze(1)).float().mean())
+    w = np.array(model.weight.tolist()[0])
+    b = float(model.bias.tolist()[0])
+    return acc, w, b, w_star
+
+
+def highdim_logistic_geocore(d=10, n=500, seed=0):
+    from geocore import EuclideanSpace, minimize
+
+    rng = np.random.default_rng(seed)
+    X = rng.standard_normal((n, d))
+    w_star = rng.standard_normal(d)
+    b_star = 0.5
+    y = (X @ w_star + b_star > 0).astype(float)
+    E = EuclideanSpace(d + 1)  # (w, b)
+
+    def bce(params):
+        w = params[:d]
+        b = params[d]
+        z = X @ w + b
+        return float(np.mean(np.logaddexp(0.0, z) - y * z))
+
+    res = minimize(E, bce, np.zeros(d + 1), lr=0.05, n_steps=500, optimizer="adam")
+    w = res.point[:d]
+    b = res.point[d]
+    acc = float(np.mean((X @ w + b > 0) == (y > 0)))
+    return acc, w, b, w_star
+
+
 def main_extra():
     print("\n=== 2b. LOGISTIC REGRESSION (classify y = (2x-1 > 0)) ===")
     w_t, b_t = logistic_regression_torch()
@@ -288,6 +338,14 @@ def main_extra():
     w_g, b_g, f_g = adam_rosenbrock_geocore()
     print(f"PyTorch : ({w_t:.4f}, {b_t:.4f})  f = {f_t:.3e}")
     print(f"geocore : ({w_g:.4f}, {b_g:.4f})  f = {f_g:.3e}")
+
+    print("\n=== 2e. HIGH-DIMENSIONAL LOGISTIC REGRESSION (d=10 features) ===")
+    acc_t, w_t, b_t, w_star = highdim_logistic_torch()
+    acc_g, w_g, b_g, _ = highdim_logistic_geocore()
+    cos_t = float(np.dot(w_t, w_star) / (np.linalg.norm(w_t) * np.linalg.norm(w_star)))
+    cos_g = float(np.dot(w_g, w_star) / (np.linalg.norm(w_g) * np.linalg.norm(w_star)))
+    print(f"PyTorch : accuracy {acc_t:.3f}, w direction cos {cos_t:+.3f}")
+    print(f"geocore : accuracy {acc_g:.3f}, w direction cos {cos_g:+.3f}")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ __version__ = "0.1.0"
 
 from . import circuit, clifford, derivatives, geostats, hyperbolic, invariants, manifolds, objects, ops, optim, qec, rotations, shortcuts, spectral, sphere, verify, viz  # noqa: F401
 from .hyperbolic import HyperbolicPlane  # noqa: F401
-from .manifolds import PolarPlane  # noqa: F401
+from .manifolds import EuclideanSpace, PolarPlane  # noqa: F401
 from .circuit import Circuit  # noqa: F401
 from .spectral import Circle  # noqa: F401
 from .sphere import Sphere  # noqa: F401
@@ -41,6 +41,7 @@ __all__ = [
     "Pauli",
     "Circuit",
     "PolarPlane",
+    "EuclideanSpace",
     "Sphere",
     "HyperbolicPlane",
     "Circle",

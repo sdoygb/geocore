@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 188 tests
+└── tests/                   # 192 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -471,6 +471,16 @@ to the professional agencies (within their typical error); the LIFECYCLE
 (decay / dissipation) is not predicted — the similar-track method
 forecasts tracks, not intensity.
 
+### EuclideanSpace: the N-dimensional fix
+
+`EuclideanSpace(n)` is R^n as a flat manifold — geodesics are straight
+lines, transport is the identity — which removes the "2-d only"
+limitation: the optimizers now run on arbitrary-dimensional problems.
+Verified: quadratic optimization converges in n = 3/10/50 to ~1e-14; a
+d = 10-feature logistic regression on EuclideanSpace(11) reaches 99.4%
+accuracy with the learned weight direction at cos = +0.999 of the true
+one — matching torch's nn.Linear + BCEWithLogits (0.994, cos +1.000).
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -492,6 +502,7 @@ Extended comparisons (`examples/pytorch_comparison.py`):
 | Example | PyTorch | geocore | Agreement |
 |---|---|---|---|
 | Logistic regression (boundary x=0.5) | nn.Linear + BCE → x≈0.50 | minimize() → x≈0.41 | both near the truth |
+| **High-dim logistic (d=10)** | nn.Linear(10) + BCE → acc 0.994 | minimize() on **EuclideanSpace(11)** → acc 0.994 | w direction cos +1.000 / +0.999 |
 | Hessian of Re⟨ψ\|R₁R₂\|ψ⟩ | `torch.autograd.functional.hessian` | analytic 2×2 Hessian | **1.1e-16** |
 | Adam on Rosenbrock | torch.optim.Adam → f≈2e-7 | RiemannianAdam → f≈4e-6 | both converge to (1,1) |
 
@@ -678,6 +689,9 @@ Done so far — each with machine-precision verification + measured benchmark:
 25. ✅ More PyTorch examples: logistic regression, Hessian (1.1e-16 vs
     torch autograd; caught a wrong mixed-term derivation), Adam on
     Rosenbrock (both converge).
+26. ✅ EuclideanSpace(n): arbitrary-dimension optimization/classification
+    (the 2D-only limitation fixed) — high-dim logistic matches torch
+    (acc 0.994 both, w cos +1.000 vs +0.999).
 
 Next candidates (hypotheses to measure, not claims):
 - Intensity/lifecycle modeling (the honest gap the comparison exposed).

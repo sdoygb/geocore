@@ -238,13 +238,14 @@ class RieszGradientValidity(Invariant):
 
     def check(self, result, manifold, df, point, **kwargs) -> VerificationReport:
         rng = np.random.default_rng(0)
-        g0, g1 = manifold.metric_diag(np.asarray(point, dtype=float))
+        g = np.asarray(manifold.metric_diag(np.asarray(point, dtype=float)))
+        d = np.asarray(result, dtype=float)
         worst = 0.0
         for _ in range(5):
-            v = rng.standard_normal(2)
+            v = rng.standard_normal(len(d))
             v /= np.linalg.norm(v) + 1e-30
-            lhs = float(g0 * result[0] * v[0] + g1 * result[1] * v[1])  # g(grad, v)
-            rhs = float(df[0] * v[0] + df[1] * v[1])  # df(v)
+            lhs = float(np.sum(g * d * v))  # g(grad, v)
+            rhs = float(np.sum(np.asarray(df, dtype=float) * v))  # df(v)
             worst = max(worst, abs(lhs - rhs))
         return VerificationReport(
             ok=worst < self.atol,
