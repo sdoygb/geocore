@@ -129,7 +129,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 163 tests
+└── tests/                   # 167 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -405,6 +405,25 @@ is the verified detection logic and the geometric phase-space view.
 Event detection caught a real bug in its own first version (runs
 starting from neutral were never recorded — fixed).
 
+### ENSO statistical forecast (`examples/enso_forecast.py`)
+
+A statistical estimate from the 1950-2026 record (not a physical
+forecast — see NOAA CPC/IRI for authoritative outlooks):
+
+```
+El Nino start-to-start interval: mean 3.43 yr, range [1, 6]
+La Nina start-to-start interval: mean 3.74 yr, range [1, 9]
+strong El Nino -> La Nina within 2 yr: 44%
+next El Nino : expected ~2026.4, 68% window [2025.1, 2027.8]
+official ONI tail turns positive (+1.39 by mid-2026) — consistent
+```
+
+The statistical window agrees with the official initial conditions at
+the end of the ONI file (the trailing values turn positive through
+2026), and the 2025-10..12 ONI dip below −0.5 flags a possible weak
+La Nina that the 2026 official tail then interrupts — both signals
+cross-check each other.
+
 ## Circuit object
 
 A `Circuit` is a gate sequence of Clifford gates (`h, s, sd, sx, sxdg,
@@ -544,6 +563,9 @@ Done so far — each with machine-precision verification + measured benchmark:
 19. ✅ El Niño/La Niña diagnosis (NOAA ONI 1950-2026): event detection
     reproduces the famous peaks (2015-16: 2.59, 1997-98: 2.37); winter
     phase-locking verified; phase-space regimes separate.
+20. ✅ ENSO statistical forecast: interval/alternation statistics from
+    the real record — next El Nino expected ~2026.4 (window
+    [2025.1, 2027.8]), cross-checked against the official ONI tail.
 
 Next candidates (hypotheses to measure, not claims):
 - Documentation hosting (GitHub Pages).

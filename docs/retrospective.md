@@ -40,6 +40,7 @@ Architected with PyTorch as the structural reference, layer by layer:
 | 17 | Circuit object + optimizer | — | unitary equivalence to 1e-9 | — |
 | 18 | Real circular data (wind, 3 cities) | — | circular mean matches climate; arithmetic 183° off | — |
 | 19 | El Niño/La Niña diagnosis (NOAA ONI) | — | famous peaks 2.59/2.37/2.14; winter locking | — |
+| 20 | ENSO statistical forecast | — | interval stats; window cross-checked vs official tail | — |
 
 Every shortcut is verified against its generic path (closed form vs
 expm / RK4 / eigensolve / simulation / finite differences) and every
