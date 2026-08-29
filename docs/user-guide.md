@@ -121,6 +121,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 30 | Quantum: H2 VQE | — | exact ground state to 5e-10; analytic grad verified | — |
 | 31 | Quantum: barren-plateau diagnostics | — | global cost falls ~1.8× faster/qubit than local; no plateau at n=2 | — |
 | 32 | Quantum: pre-training vs barren plateaus | — | warm start restores gradient ~5 orders; naive zero-fill trap exposed | — |
+| 33 | Quantum: geometric root of barren plateaus | — | intrinsic == euclidean decay (not a coordinate artifact); root = concentration × alignment | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -158,6 +159,7 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 32 features, 218 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 33 features, 224 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons + VQE + barren-plateau diagnostics + pre-training
-mitigation), 12 measured shortcuts (see catalog).
+mitigation + geometric-root analysis), 12 measured shortcuts (see
+catalog).

@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 218 tests
+└── tests/                   # 224 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -630,6 +630,44 @@ Honest framing: this is a mitigation protocol with measured numbers
 precision exposes), not a claimed solution of the open barren-plateau
 problem.
 
+### Quantum: the geometric root of barren plateaus (`examples/vqe_barren_geometry.py`)
+
+Re-deriving the *root* of the plateau from information geometry (the
+geometry-theory article 0.11: Fisher-metric intrinsicness, Bures ==
+QFI/4) instead of the standard three papers.  A parameterized circuit
+embeds a manifold into state space with intrinsic metric QFI; the
+literature measures the plateau with the *Euclidean-coordinate*
+gradient variance — a parameterization-dependent quantity.  We measure
+the coordinate-free intrinsic scale ‖g‖_F = sqrt(gᵀF⁺g) and compare
+decay rates (Ising chain, fidelity cost, exact analytic derivatives):
+
+```
+[1] Decay with width n (random init):
+      n= 6: euc 1.49e-3  intrinsic 1.35e-2  |v| 3.55e-2  align 0.381
+      ...
+      n=14: euc 2.38e-6  intrinsic 2.05e-5  |v| 1.50e-3  align 0.014
+      log10 slopes/qubit: euc -0.328  intrinsic -0.317  |v| -0.159
+                          align -0.158
+      -> intrinsic and euclidean decay at the SAME rate: the plateau
+         is NOT a coordinate artifact.
+      Root = cost concentration |v|  x  geometric alignment
+             (-0.159 + -0.158 = -0.317 ~= euc -0.328)
+[2] Natural-gradient SGD (coordinate-free): stuck like euclidean SGD
+    (fidelity 0.000 after 300 steps at n=12) — a coordinate-level fix
+    cannot cure a geometric decay (machine-verifies why natural
+    gradient is only a partial mitigation in the literature).
+[3] Warm start: intrinsic scale 540x the random median (up to 6.6e4x),
+    and the tangent space is rank-deficient (40/46 effective
+    directions near a product state) — the geometric face of parameter
+    redundancy; moving the *position on the manifold* works where
+    changing coordinates cannot.
+```
+
+QFI verified against central differences to 4.9e-10.  Honest framing:
+this re-derives the root in coordinate-free terms and machine-verifies
+which levers work (position on the manifold) and which cannot
+(coordinates); it is not a claimed solution of the open problem.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -865,6 +903,12 @@ Done so far — each with machine-precision verification + measured benchmark:
     gradient ~5 orders of magnitude at n=12 (SGD stuck at fidelity
     0.000 vs warm 0.402); machine precision exposed the naive
     zero-fill trap (RZZ slots exactly zero on the real-Pauli cost).
+33. ✅ Quantum: the geometric root of barren plateaus — coordinate-free
+    (QFI-metric) re-derivation: intrinsic gradient decays at the same
+    rate as the Euclidean one (plateau is not a coordinate artifact);
+    root = cost concentration × geometric alignment; natural gradient
+    cannot cure it; warm start raises intrinsic scale 540x (rank
+    deficiency = parameter redundancy).
 
 Next candidates (hypotheses to measure, not claims):
 - QAOA (MaxCut) — combinatorial optimization on the same pipeline.
