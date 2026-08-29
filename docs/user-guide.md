@@ -128,6 +128,7 @@ and reports a measured `BenchmarkLog` (wall time + FLOPs speedup).
 | 37 | Quantum: QAOA (MaxCut) gradient geometry | — | gradient O(1-10) across n,p (no barren plateau); gamma/beta split; no param concentration | — |
 | 38 | Quantum: spectrum-guided vs plateaus | — | guided params 3-7× larger gradient, slower decay (−0.309 vs −0.356/q); better convergence | — |
 | 39 | Quantum: discrete dynamic evolution | — | zero-gradient adiabatic: fid 0.978 (n=10) while HEA is barren; plateau never enters | — |
+| 40 | Quantum: evolution scaling + molecule | — | Ising Δ~3/n, T~O(n²) (polynomial); H2 to chemical accuracy (1e-4 Ha) zero-gradient | — |
 | 12 | QEC diagnostics | application | pseudo-threshold = π/2 exact | 18.7× (vectorized sweep) |
 
 ## Verification discipline
@@ -165,9 +166,9 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 39 features, 262 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 40 features, 266 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons + VQE + barren-plateau diagnostics + pre-training
 mitigation + geometric-root analysis + noise geometry series (4
 fingerprints) + QAOA gradient geometry + spectrum-guided
-parameterization + discrete dynamic evolution), 12 measured shortcuts
-(see catalog).
+parameterization + discrete dynamic evolution + evolution scaling),
+12 measured shortcuts (see catalog).

@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 262 tests
+└── tests/                   # 266 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -840,6 +840,26 @@ convergence plateaus at ~0.98 (adiabatic/Trotter residual).  What it
 demonstrates: the plateau is a disease of continuous parameterization —
 discrete dynamic evolution does not enter that framework at all.
 
+### Quantum: discrete evolution at scale (`examples/vqe_evolution_scaling.py`)
+
+The solver's scaling law and molecular reach (feature 40):
+
+```
+[A] Ising: gap Delta ~ 3/n (n*Delta = 2.78, 2.89, 2.95, 2.99, 3.01
+    for n=4..12); adiabatic time T_req(0.90) * Delta^2 ~ 13-25 ->
+    T ~ O(n^2): polynomial, NOT the exponential of the plateau
+    (odd n: the transverse-field path has a spurious degeneracy at
+    s=0.5 where the X terms cancel — honest limitation)
+[B] H2 molecule (STO-3G): discrete adiabatic from the HF-like
+    diagonal state |01> -> exact ground state: fidelity 0.9999,
+    energy err +0.0001 Ha — 16x inside chemical accuracy (1.6e-3),
+    zero gradients, zero parameters
+```
+
+Honest: T ~ 1/Δ² is family-dependent; odd-n Ising needs a
+symmetry-aware path; the H2 test is the 2-qubit reduction (full
+spin-orbital JW pipeline is future work).
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -1116,13 +1136,19 @@ Done so far — each with machine-precision verification + measured benchmark:
     0.993/0.989/0.984/0.978 at n=4/6/8/10) while the continuous-
     gradient HEA is barren and stuck (gradient 3.5e-5 at n=12).
     The plateau never enters because there is no gradient.
+40. ✅ Quantum: evolution scaling + molecule — Ising gap Δ~3/n
+    (nΔ→3.0), T_req~O(n²) (T·Δ²~13-25, polynomial not exponential);
+    H2 molecule converges to chemical accuracy (err 1e-4 Ha, 16x
+    inside 1.6e-3) with zero gradients.  Honest: odd-n path has a
+    spurious s=0.5 degeneracy; H2 is the 2-qubit reduction.
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,
   with the intermediate regimes (mixed coherent + depolarizing).
 - QAOA parameter transfer: train on small n, apply to large n
   (transferability measured, since concentration is family-dependent).
-- T(n) adiabatic scaling law for the discrete evolution solver.
+- Full spin-orbital JW pipeline for LiH (the 2-qubit H2 reduction is
+  done; the general fermionic mapping is the next step).
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
