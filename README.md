@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 182 tests
+└── tests/                   # 185 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -471,6 +471,22 @@ to the professional agencies (within their typical error); the LIFECYCLE
 (decay / dissipation) is not predicted — the similar-track method
 forecasts tracks, not intensity.
 
+### PyTorch's classic examples, re-run with geocore
+
+`examples/pytorch_comparison.py` runs three official-tutorial problems
+side by side:
+
+| Example | PyTorch | geocore | Agreement |
+|---|---|---|---|
+| Linear regression (learn y=3x−2) | nn.Linear + SGD → w=2.9999, b=−1.9963 | minimize() → w=3.0036, b=−1.9919 | both at the noise floor |
+| Autograd Jacobian of a geodesic | `torch.autograd.functional.jacobian` | analytic `geodesic.jacobian` | **1.1e-16** |
+| Circle-Laplacian spectrum | `torch.linalg.eigvalsh` (discrete) | closed form k² | converges O(1/N²) |
+
+The Jacobian row is the cleanest statement of the project's
+verification discipline: PyTorch's automatic differentiation and our
+analytic closed form compute the same derivative to machine precision —
+the analytic path is not an approximation, it is the exact answer.
+
 ### Spectral (geometrized) ENSO forecast (`examples/enso_spectral_forecast.py`)
 
 The spectrum as a geometric invariant: the observed ONI's dominant
@@ -644,6 +660,8 @@ Done so far — each with machine-precision verification + measured benchmark:
 23. ✅ Live storm track forecast vs NHC: similar-track (analog) method
     on the S² pipeline; +24h within 0.8 deg of NHC for JULIO 2026;
     lifecycle prediction honestly absent.
+24. ✅ PyTorch classic examples re-run: linear regression, autograd
+    Jacobian (1.1e-16 vs torch), spectrum — the same math, verified.
 
 Next candidates (hypotheses to measure, not claims):
 - Intensity/lifecycle modeling (the honest gap the comparison exposed).
