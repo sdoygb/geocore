@@ -355,8 +355,8 @@ def minimize(
             grad = np.asarray(grad_f(point), dtype=float)
             if verify_grad:
                 df = _central_difference(f, point)
-                g0, g1 = manifold.metric_diag(point)
-                grad_fd = np.array([df[0] / g0, df[1] / g1])
+                g = np.asarray(manifold.metric_diag(point))
+                grad_fd = df / g
                 max_grad_error = max(
                     max_grad_error, float(np.abs(grad - grad_fd).max())
                 )

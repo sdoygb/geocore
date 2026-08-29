@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 196 tests
+└── tests/                   # 199 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -497,6 +497,25 @@ The 0.965 test accuracy matches the literature reference (~0.95-0.97
 for plain logistic regression on this dataset), the two stacks agree
 exactly, and the learned feature ranking is clinically sensible.
 
+### NPC screening feasibility (`examples/npc_screening.py`)
+
+Nasopharyngeal-carcinoma screening from plasma metallomics — an honest
+feasibility assessment.  There is no public per-patient NPC dataset
+(the paper's raw data is on request), so we use the published summary
+table (17 plasma elements, Mean±SD per group, Sci. Rep. 15 2025,
+Table S6) in two clearly-separated ways:
+
+1. **Effect sizes** (NPC vs non-cancer): Pb d=−5.8, Sb −3.2, Se +2.5,
+   Ni −2.2, Zn −1.2, Cu +1.1 — the Zn-depletion/Cu-elevation signature
+   of the cancer literature.
+2. **Labeled Gaussian simulation** (from the published Mean±SD, n=15/
+   group): LOOCV accuracy 0.97 mean over seeds — the screening problem
+   is highly separable *if the distribution is as published*.
+
+Verdict: screening is technically feasible with our high-dimensional
+pipeline (EuclideanSpace logistic regression); real deployment needs
+the authors' per-patient data or a collected cohort.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -711,6 +730,9 @@ Done so far — each with machine-precision verification + measured benchmark:
 27. ✅ Real high-dim application: breast-cancer diagnosis (Wisconsin,
     30 features) — test acc 0.9649, identical to torch (diff 0.0000),
     matching the literature reference.
+28. ✅ NPC screening feasibility (plasma metallomics): effect sizes
+    (Pb −5.8, Se +2.5…) + labeled simulation (LOOCV 0.97) — screening
+    technically feasible; real data needed for deployment.
 
 Next candidates (hypotheses to measure, not claims):
 - Intensity/lifecycle modeling (the honest gap the comparison exposed).
