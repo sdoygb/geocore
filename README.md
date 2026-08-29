@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 281 tests
+└── tests/                   # 285 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -881,6 +881,25 @@ Zero-gradient discrete evolution on the diagonal→full path:
 The first real molecule beyond the 2-qubit H2 reduction, solved with
 zero gradients (the plateau never enters).  Requires openfermion.
 
+### Quantum: there is no absolute plateau (`examples/vqe_relative_plateau.py`)
+
+The classic demonstration of relative barrenness (article 10.86 §9):
+the SAME Ising n=12 system, the same target — the TOOL decides:
+
+```
+  tool A  pure-continuous HEA   : grad RMS 2.7e-7   BARREN
+  tool A' continuous+spectrum   : anchored grad 3.8e-4
+                                  partially protected (~1400x)
+  tool B  discrete evolution    : fidelity 0.972   CONVERGED
+```
+
+A continuous tool on a discrete-spectrum system is barren; the
+spectrum anchor (a discrete face injected into the continuous tool) or
+the discrete evolution on the same system is protected / converged.
+Barrenness is relative to the tool choice — not an absolute property
+of the system.  (The protection is the anchor's existence, L>=1; more
+anchor layers add no gain — measured.)
+
 ### Quantum: input universality (`examples/vqe_molecule_universal.py`)
 
 The SAME zero-gradient pipeline (openfermion JW → diagonal→full
@@ -1199,6 +1218,12 @@ Done so far — each with machine-precision verification + measured benchmark:
      H2 near (2.2e-3), particle-number sector automatic (N=2/4/10);
      H2O is the honest boundary (fid 0.992, plateau above chemical
      accuracy — adiabatic-path quality, sectors correct).
+ 43. ✅ Quantum: relative plateau — the same Ising n=12 system is
+     barren under the pure-continuous tool (grad 2.7e-7), partially
+     protected under continuous+spectrum-anchor (3.8e-4), converged
+     under discrete evolution (fid 0.972): there is no absolute
+     plateau, only a tool-system mismatch (article 10.86 §9); the
+     anchor's existence (L>=1), not the layer count, is the lever.
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,
