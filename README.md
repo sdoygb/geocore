@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 250 tests
+└── tests/                   # 255 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -786,6 +786,35 @@ Graph: deterministic 3-regular cycle + diameter matching (n even);
 MaxCut by exhaustive cut count as the machine reference.  Honest: exact
 gradients, one deterministic family — not a claim about all QAOA.
 
+### Quantum: spectrum-guided parameterization vs plateaus (`examples/vqe_spectrum_guided.py`)
+
+The "rebuild the landscape" lever — the geometric answer to "is the
+plateau a resolution problem or a structural one?" (it is structural:
+the random parameterization floods the Hilbert space and the
+high-dimensional geometry flattens the landscape).  Instead of sampling
+harder to see vanishing slopes (features 31-33) or walking to a good
+region (feature 32 warm start), we ADD PROBLEM-SPECTRUM GEOMETRY to the
+parameterization: interleave the HEA with diagonal-phase layers
+e^{-iγₖH_C} (H_C = the diagonal problem Hamiltonian).  Machine-verified
+(fidelity cost, exact reverse-adjoint gradients, 4.5e-11):
+
+```
+[1] Spectrum-guided (diagonal-phase) parameters carry a 3-7x LARGER
+    gradient than the random-axis HEA parameters; ratio grows with n:
+      n= 6: 2.9x, n= 8: 4.1x, n=10: 4.2x, n=12: 7.2x
+    log10 slopes/qubit: HEA -0.356, spectrum -0.309 — the guided
+    parameters decay SLOWER: the problem spectrum partially protects
+    them from the high-dimensional flattening.
+[2] Adam 300 steps, n=8, 5 starts: mixed ansatz median fidelity 0.743
+    vs pure HEA 0.670; worst 0.690 vs 0.655 — better and stabler.
+```
+
+Honest framing: the first machine-verified instance that the
+parameterization *geometry* — not the sampling resolution — is the
+handle on the plateau; NOT a universal cure (guided params still decay
+on the global cost, only slower).  During development a sign bug in
+the diagonal derivative was caught by the gradient verification.
+
 ### PyTorch's classic examples, re-run with geocore
 
 `examples/pytorch_comparison.py` runs three official-tutorial problems
@@ -1049,12 +1078,21 @@ Done so far — each with machine-precision verification + measured benchmark:
     (NO barren plateau, contrast HEA -0.32/qubit); gamma/beta split
     measured; optimal parameters do NOT concentrate on this family
     (honest); p=2 cut ratio 0.79-0.93 of exhaustive MaxCut.
+38. ✅ Quantum: spectrum-guided parameterization vs plateaus — the
+    "rebuild the landscape" lever: problem-spectrum (diagonal-phase)
+    parameters carry a 3-7x larger gradient than random-axis HEA
+    params (ratio grows with n, slope -0.309 vs -0.356/qubit);
+    mixed ansatz converges better/stabler (median 0.743 vs 0.670).
+    Geometric answer: the plateau is structural for the random
+    parameterization, not the guided part.
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,
   with the intermediate regimes (mixed coherent + depolarizing).
 - QAOA parameter transfer: train on small n, apply to large n
   (transferability measured, since concentration is family-dependent).
+- Spectrum-guided ansatz on a real molecule (pyscf LiH) — the
+  "rebuild the landscape" lever beyond the Ising toy.
 
 The theory is the engine, not the claim: what ships is standard math,
 verified to machine precision, with measured performance numbers.
