@@ -75,3 +75,27 @@ def test_sz_sector_equals_full_n2():
     w2, _ = spla.eigsh(sparse.diags(hd2) + H2, k=1, which="SA")
     assert H2.shape[0] == 14400         # C(10,7)^2
     assert abs(w1[0] - w2[0]) < 1e-8
+
+
+def test_matrix_free_sz_matches_sparse():
+    """The matrix-free S_z action (no matrix built) equals the sparse
+    S_z build on random vectors (the honest route to large sectors)."""
+    from geoqc import exterior as ex
+    from geoqc.scf import fock_matrix
+    n, h, eri, S, nuc = ao_integrals(LIH, "sto-3g")
+    E, P, C, C_o, _, _ = grassmann_scf(h, eri, S, 2)
+    X = np.asarray(sqrtm(np.linalg.inv(S)).real)
+    h_o = X.T @ h @ X
+    eri_o = mo_transform(X, eri)
+    F = fock_matrix(h_o, eri_o, 2.0 * C_o @ C_o.T)
+    _, C_all = np.linalg.eigh(F)
+    o = C_all.T @ h_o @ C_all
+    t = mo_transform(C_all, eri_o)
+    o_s, t_s = spin_orbital_integrals(o, t)
+    hd, H = exterior.exterior_hamiltonian_sz(12, 4, 0, o_s, t_s,
+                                             float(nuc), 1e-5)
+    L = ex.exterior_action_sz(12, 4, 0, o_s, t_s, float(nuc), 1e-5)
+    rng = np.random.default_rng(0)
+    v = rng.standard_normal((L.shape[0], 2)).view(complex)[:, 0]
+    v /= np.linalg.norm(v)
+    assert np.linalg.norm(L @ v - (sparse.diags(hd) + H) @ v) < 1e-8

@@ -411,3 +411,189 @@ def exterior_action(n, N, o, t, const, eps=0.0):
         return Hv
 
     return LinearOperator((dim, dim), matvec=matvec, dtype=complex)
+
+
+def _spin_sign(az, bz, k, is_beta, pc=_POPCOUNT8):
+    """Exterior grading sign on the alpha/beta bitstrings for orbital
+    k of the given spin: for alpha_k, (-1)^{popcount(az & (2^k-1)) +
+    popcount(bz & (2^k-1))}; for beta_k, alpha bits k'<=k and beta
+    bits k'<k (interleaved order).  Pure table-lookup popcounts, no
+    big-endian reconstruction (the geometric split of the sign)."""
+    if not is_beta:
+        m = (1 << k) - 1
+        return 1.0 - 2.0 * ((_popcount64(az & m) + _popcount64(bz & m)) & 1)
+    ma = (1 << (k + 1)) - 1
+    mb = (1 << k) - 1
+    return 1.0 - 2.0 * ((_popcount64(az & ma) + _popcount64(bz & mb)) & 1)
+
+
+def exterior_action_sz(n, N, sz, o, t, const, eps=0.0):
+    """Matrix-free H|v> in the S_z sector — no sector matrix is ever
+    built (the honest route to dim ~1e8 sectors whose sparse matrices
+    would be TB-scale).  The sector index factorises:
+    idx = rank_alpha(az) * C(n_orb, n_beta) + rank_beta(bz), with the
+    ranks in precomputed O(2^n_orb) tables — O(1) per element; the
+    grading signs split into alpha/beta popcounts (vectorised).
+    Returns a scipy LinearOperator."""
+    from scipy.sparse.linalg import LinearOperator
+    from math import comb
+    n_a = (N + 2 * sz) // 2
+    n_b = N - n_a
+    n_orb = n // 2
+    dim_a = comb(n_orb, n_a)
+    dim_b = comb(n_orb, n_b)
+    dim = dim_a * dim_b
+
+    def rank_table(k):
+        tab = np.full(1 << n_orb, -1, dtype=np.int64)
+        for i, c in enumerate(combinations(range(n_orb), k)):
+            tab[sum(1 << j for j in c)] = i
+        return tab
+
+    rt_a = rank_table(n_a)
+    rt_b = rank_table(n_b)
+
+    # bitstring of every rank (for source/target index lookup)
+    az_of_rank = np.full(dim_a, -1, dtype=np.int64)
+    for i, c in enumerate(combinations(range(n_orb), n_a)):
+        az_of_rank[i] = sum(1 << j for j in c)
+    bz_of_rank = np.full(dim_b, -1, dtype=np.int64)
+    for i, c in enumerate(combinations(range(n_orb), n_b)):
+        bz_of_rank[i] = sum(1 << j for j in c)
+
+    # diagonal hd (O(dim) memory — the only O(dim) object)
+    az_grid = np.repeat(az_of_rank, dim_b)
+    bz_grid = np.tile(bz_of_rank, dim_a)
+    hd = np.full(dim, const, dtype=complex)
+    for k in range(n_orb):
+        hd += (o[2 * k, 2 * k] * ((az_grid >> k) & 1)
+               + o[2 * k + 1, 2 * k + 1] * ((bz_grid >> k) & 1))
+
+    # ---- S_z-conserving term lists ----
+    one_terms = []
+    for p in range(n):
+        for q in range(n):
+            if p == q or abs(o[p, q]) <= eps:
+                continue
+            if (p & 1) != (q & 1):
+                continue
+            one_terms.append((p, q, complex(o[p, q])))
+    two_terms = []
+    for p in range(n):
+        for q in range(p + 1, n):
+            for r in range(n):
+                for s in range(r + 1, n):
+                    c2 = 2.0 * (t[p, q, r, s] - t[p, q, s, r])
+                    if abs(c2) <= eps:
+                        continue
+                    if (1 - p % 2) + (1 - q % 2) != \
+                       (1 - r % 2) + (1 - s % 2):
+                        continue
+                    two_terms.append((p, q, r, s, complex(c2)))
+
+    # ---- precompute per-term source/target az/bz arrays ----
+    one_sets = []
+    for p, q, c in one_terms:
+        is_beta = bool(p & 1)
+        kp, kq = p // 2, q // 2
+        spin_k = n_b if is_beta else n_a
+        need = (n_b - 1) if is_beta else (n_a - 1)
+        rest = [k for k in range(n_orb) if k != kq and k != kp]
+        c_spin = np.array(list(combinations(range(n_orb - 2), need)),
+                          dtype=np.int64)
+        zs_spin = np.full(c_spin.shape[0], 1 << kq, dtype=np.int64)
+        rest_a = np.array(rest, dtype=np.int64)
+        for i in range(need):
+            zs_spin |= 1 << rest_a[c_spin[:, i]]
+        c_opp = np.array(list(combinations(range(n_orb), spin_k)),
+                         dtype=np.int64)
+        zs_opp = np.zeros(c_opp.shape[0], dtype=np.int64)
+        for i in range(spin_k):
+            zs_opp |= 1 << c_opp[:, i]
+        zt_spin = zs_spin ^ (1 << kq) ^ (1 << kp)
+        one_sets.append((is_beta, kp, kq, zs_spin, zt_spin, zs_opp, c))
+
+    two_sets = []
+    for p, q, r, s, c2 in two_terms:
+        rest = [u for u in range(n) if u not in (p, q, r, s)]
+        if len(rest) < N - 2:
+            continue
+        combs = np.array(list(combinations(range(len(rest)), N - 2)),
+                         dtype=np.int64)
+        z = np.full(combs.shape[0], (1 << (n - 1 - r)) | (1 << (n - 1 - s)),
+                    dtype=np.int64)
+        rest_a = np.array(rest, dtype=np.int64)
+        for i in range(N - 2):
+            z |= 1 << (n - 1 - rest_a[combs[:, i]])
+        am = np.int64(0)
+        for k in range(n_orb):
+            am |= np.int64(1) << (n - 1 - 2 * k)
+        keep = _popcount64(z & am) == n_a
+        if not keep.any():
+            continue
+        z = z[keep]
+        az = np.zeros(len(z), dtype=np.int64)
+        bz = np.zeros(len(z), dtype=np.int64)
+        for k in range(n_orb):
+            az |= ((z >> (n - 1 - 2 * k)) & 1) << k
+            bz |= ((z >> (n - 2 - 2 * k)) & 1) << k
+        two_sets.append((p, q, r, s, c2, az, bz))
+
+    def matvec(v):
+        v = np.asarray(v).reshape(-1)
+        Hv = hd * v
+        for is_beta, kp, kq, zs_spin, zt_spin, zs_opp, c in one_sets:
+            n_spin = zs_spin.shape[0]
+            n_opp = zs_opp.shape[0]
+            if not is_beta:
+                az_src = np.broadcast_to(zs_spin[:, None],
+                                         (n_spin, n_opp)).ravel()
+                bz_src = np.broadcast_to(zs_opp[None, :],
+                                         (n_spin, n_opp)).ravel()
+                az_tgt = np.broadcast_to(zt_spin[:, None],
+                                         (n_spin, n_opp)).ravel()
+                bz_tgt = bz_src
+                sgn = _spin_sign(az_src, bz_src, kq, False) \
+                    * _spin_sign(az_tgt, bz_tgt, kp, False)
+            else:
+                bz_src = np.broadcast_to(zs_spin[:, None],
+                                         (n_spin, n_opp)).ravel()
+                az_src = np.broadcast_to(zs_opp[None, :],
+                                         (n_spin, n_opp)).ravel()
+                bz_tgt = np.broadcast_to(zt_spin[:, None],
+                                         (n_spin, n_opp)).ravel()
+                az_tgt = az_src
+                sgn = _spin_sign(az_src, bz_src, kq, True) \
+                    * _spin_sign(az_tgt, bz_tgt, kp, True)
+            si = rt_a[az_src] * dim_b + rt_b[bz_src]
+            ti = rt_a[az_tgt] * dim_b + rt_b[bz_tgt]
+            np.add.at(Hv, ti, c * sgn * v[si])
+        for p, q, r, s, c2, az, bz in two_sets:
+            si = rt_a[az] * dim_b + rt_b[bz]
+            # sequential signs s, r, q, p (each on the current state)
+            az1, bz1 = az, bz
+            sgn = _spin_sign(az1, bz1, s // 2, bool(s & 1))
+            if s & 1:
+                bz1 = bz1 ^ (1 << (s // 2))
+            else:
+                az1 = az1 ^ (1 << (s // 2))
+            sgn *= _spin_sign(az1, bz1, r // 2, bool(r & 1))
+            if r & 1:
+                bz1 = bz1 ^ (1 << (r // 2))
+            else:
+                az1 = az1 ^ (1 << (r // 2))
+            sgn *= _spin_sign(az1, bz1, q // 2, bool(q & 1))
+            if q & 1:
+                bz1 = bz1 ^ (1 << (q // 2))
+            else:
+                az1 = az1 ^ (1 << (q // 2))
+            sgn *= _spin_sign(az1, bz1, p // 2, bool(p & 1))
+            if p & 1:
+                bz1 = bz1 ^ (1 << (p // 2))
+            else:
+                az1 = az1 ^ (1 << (p // 2))
+            ti = rt_a[az1] * dim_b + rt_b[bz1]
+            np.add.at(Hv, ti, c2 * sgn * v[si])
+        return Hv
+
+    return LinearOperator((dim, dim), matvec=matvec, dtype=complex)
