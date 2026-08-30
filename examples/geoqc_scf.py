@@ -21,7 +21,7 @@ Run:  PYTHONPATH=src python3 examples/geoqc_scf.py
 
 import numpy as np
 
-from geoqc.integrals import ao_integrals
+from geoqc.integrals import ao_integrals, mo_transform
 from geoqc.scf import grassmann_scf
 from geoqc import exterior
 
@@ -50,7 +50,7 @@ def main():
     ]
     for name, geom, ne, n_electrons in cases:
         n, h, eri, S, nuc = ao_integrals(geom, "sto-3g")
-        E, P, C, grads, dists = grassmann_scf(h, eri, S, ne // 2)
+        E, P, C, C_o, grads, dists = grassmann_scf(h, eri, S, ne // 2)
         mol = gto.M(atom=geom, basis="sto-3g")
         mf = scf.RHF(mol)
         mf.kernel()
@@ -68,8 +68,8 @@ def main():
         from geoqc.scf import fock_matrix
         X = np.asarray(sqrtm(np.linalg.inv(S)).real)
         h_o = X.T @ h @ X
-        eri_o = np.einsum("ia,jb,kc,ld,ijkl->abcd", X, X, X, X, eri)
-        F = fock_matrix(h_o, eri_o, P)
+        eri_o = mo_transform(X, eri)
+        F = fock_matrix(h_o, eri_o, 2.0 * C_o @ C_o.T)
         ev, C_all = np.linalg.eigh(F)          # full orthonormal MO set
         o = C_all.T @ h_o @ C_all
         t = np.einsum("ia,jb,kc,ld,ijkl->abcd",

@@ -31,7 +31,7 @@ integrals are needed:
 import numpy as np
 
 __all__ = ["integrals_from_openfermion", "molecule_terms", "ao_integrals",
-           "spin_orbital_integrals"]
+           "spin_orbital_integrals", "mo_transform"]
 
 
 def spin_orbital_integrals(o, t):
@@ -41,25 +41,29 @@ def spin_orbital_integrals(o, t):
     openfermion and verified via InteractionOperator -> FCI):
     t_s[p,q,r,s] = (1/2) (a_p a_s | a_q a_r)  [chemist notation],
     with the SPIN MATCHING sigma_p = sigma_s AND sigma_q = sigma_r,
-    and the 1/2 of H2 folded inside the tensor."""
+    and the 1/2 of H2 folded inside the tensor.  Vectorised."""
     n = o.shape[0]
     ns = 2 * n
     o_s = np.zeros((ns, ns), dtype=complex)
+    o_s[0::2, 0::2] = o            # alpha-alpha
+    o_s[1::2, 1::2] = o            # beta-beta
     t_s = np.zeros((ns, ns, ns, ns), dtype=complex)
-    for i in range(n):
-        for j in range(n):
-            o_s[2 * i, 2 * j] = o[i, j]          # alpha-alpha
-            o_s[2 * i + 1, 2 * j + 1] = o[i, j]  # beta-beta
-    for a in range(n):
-        for b in range(n):
-            for c in range(n):
-                for d in range(n):
-                    v = 0.5 * t[a, d, b, c]      # (a d | b c) / 2
-                    t_s[2 * a,     2 * b,     2 * c,     2 * d] = v      # aaaa
-                    t_s[2 * a + 1, 2 * b + 1, 2 * c + 1, 2 * d + 1] = v  # bbbb
-                    t_s[2 * a,     2 * b + 1, 2 * c + 1, 2 * d] = v      # abba
-                    t_s[2 * a + 1, 2 * b,     2 * c,     2 * d + 1] = v  # baab
+    v = 0.5 * np.einsum("adbc->abcd", t)   # (a d | b c) / 2
+    t_s[0::2, 0::2, 0::2, 0::2] = v          # aaaa
+    t_s[1::2, 1::2, 1::2, 1::2] = v          # bbbb
+    t_s[0::2, 1::2, 1::2, 0::2] = v          # abba
+    t_s[1::2, 0::2, 0::2, 1::2] = v          # baab
     return o_s, t_s
+
+
+def mo_transform(C, eri):
+    """AO -> MO chemist integrals (ab|cd) = sum C^4 (ij|kl) via four
+    sequential 6-index einsums (O(n^6) each instead of O(n^8) — the
+    scale path for large bases)."""
+    t = np.einsum("ijkl,ia->ajkl", eri, C)
+    t = np.einsum("ajkl,jb->abkl", t, C)
+    t = np.einsum("abkl,kc->abcl", t, C)
+    return np.einsum("abcl,ld->abcd", t, C)
 
 
 def ao_integrals(geometry, basis="sto-3g"):

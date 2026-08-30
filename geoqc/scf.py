@@ -58,18 +58,23 @@ def rhf_energy(h, eri, P):
             - 0.25 * np.trace(P @ K))
 
 
-def grassmann_scf(h, eri, S, N, max_iter=100, tol=1e-10):
-    """RHF as a fixed point on Gr(N,n), in the Lowdin-orthonormalised
-    AO basis (the Grassmannian needs an orthonormal frame; the AO
-    basis is non-orthogonal with overlap S, electron count Tr(S P)).
-    Start from the lowest-N eigenspace of the core Hamiltonian,
-    iterate C <- lowest-N eigenspace of F(C), and stop when the
-    Grassmann gradient (1-P)FP vanishes.
-    Returns (E, P, C, grad_norms, fs_distances) in the AO basis."""
+def grassmann_scf(h, eri, S, N, max_iter=100, tol=1e-10, damp=0.5,
+                  use_diis=True):
+    """RHF as a fixed point on Gr(N,n).  Start from the lowest-N
+    eigenspace of the core Hamiltonian, iterate C <- lowest-N
+    eigenspace of F(C) with density damping and DIIS extrapolation
+    (the bare Roothaan map can converge to a metastable fixed point —
+    e.g. CH4 STO-3G; DIIS stabilises it), and stop when the Grassmann
+    gradient (1-P)FP vanishes.
+    Returns (E, P_ao, C_ao, C_ortho, grad_norms, fs_distances):
+    P_ao/C_ao in the AO basis, C_ortho the occupied subspace in the
+    Lowdin-orthonormalised basis (for the MO transform)."""
     from scipy.linalg import sqrtm
+    from geoqc.integrals import mo_transform
+    from geoqc.manifold import fs_distance
     X = np.asarray(sqrtm(np.linalg.inv(S)).real)      # S^{-1/2}
     h_o = X.T @ h @ X
-    eri_o = np.einsum("ia,jb,kc,ld,ijkl->abcd", X, X, X, X, eri)
+    eri_o = mo_transform(X, eri)
     n = h.shape[0]
     ev, C = np.linalg.eigh(h_o)
     C = C[:, :N]
@@ -77,14 +82,41 @@ def grassmann_scf(h, eri, S, N, max_iter=100, tol=1e-10):
     grads = []
     dists = []
     P_prev = None
-    from geoqc.manifold import fs_distance
+    diis_errs = []
+    diis_focks = []
+
+    def diis_extrapolate(F, P, errs, focks):
+        """DIIS: extrapolate the Fock matrix from the commutator
+        errors of previous iterations (standard SCF stabilisation)."""
+        if len(errs) < 2:
+            return F
+        k = len(errs)
+        B = np.zeros((k + 1, k + 1))
+        for i in range(k):
+            for j in range(k):
+                B[i, j] = np.vdot(errs[i], errs[j]).real
+        B[:k, k] = B[k, :k] = -1.0
+        B[k, k] = 0.0
+        rhs = np.zeros(k + 1)
+        rhs[k] = -1.0
+        c = np.linalg.solve(B, rhs)
+        F_ext = np.zeros_like(F)
+        for i in range(k):
+            F_ext += c[i] * focks[i]
+        return F_ext
 
     for it in range(max_iter):
         F = fock_matrix(h_o, eri_o, P)
         E = rhf_energy(h_o, eri_o, P)
+        if use_diis:
+            err = (F @ (0.5 * P) - (0.5 * P) @ F).ravel()
+            diis_errs.append(err)
+            diis_focks.append(F.copy())
+            if len(diis_errs) > 8:
+                diis_errs.pop(0)
+                diis_focks.pop(0)
+            F = diis_extrapolate(F, P, diis_errs, diis_focks)
         # Grassmann gradient: the occupied-virtual block (I - C C^T) F C
-        # (the tangent vector of the energy on Gr(N,n); the naive
-        # (I-P/2)FP is algebraically zero — verified)
         proj = 0.5 * P
         grad = np.linalg.norm((np.eye(n) - proj) @ F @ C)
         grads.append(grad)
@@ -98,8 +130,12 @@ def grassmann_scf(h, eri, S, N, max_iter=100, tol=1e-10):
         ev, C = np.linalg.eigh(F)
         C = C[:, :N]
         P_prev = P
-        P = 2.0 * C @ C.T
+        P_new = 2.0 * C @ C.T
+        if it == 0 or damp <= 0.0:
+            P = P_new
+        else:
+            P = (1.0 - damp) * P_new + damp * P_prev   # density damping
     # back to the AO basis
     C_ao = X @ C
     P_ao = 2.0 * C_ao @ C_ao.T
-    return E, P_ao, C_ao, np.array(grads), np.array(dists)
+    return E, P_ao, C_ao, C, np.array(grads), np.array(dists)

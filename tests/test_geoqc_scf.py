@@ -16,7 +16,8 @@ import pytest
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "examples")))
 
-from geoqc.integrals import ao_integrals, spin_orbital_integrals  # noqa: E402
+from geoqc.integrals import (  # noqa: E402
+    ao_integrals, mo_transform, spin_orbital_integrals)
 from geoqc.scf import fock_matrix, grassmann_scf, rhf_energy  # noqa: E402
 from geoqc import exterior  # noqa: E402
 
@@ -32,7 +33,7 @@ def test_grassmann_scf_matches_pyscf_lih():
     (energy to 1e-10, density to 1e-5, electron count exact)."""
     from pyscf import gto, scf
     n, h, eri, S, nuc = ao_integrals(LIH, "sto-3g")
-    E, P, C, grads, dists = grassmann_scf(h, eri, S, 2)
+    E, P, C, C_o, grads, dists = grassmann_scf(h, eri, S, 2)
     mol = gto.M(atom=LIH, basis="sto-3g")
     mf = scf.RHF(mol)
     mf.kernel()
@@ -47,7 +48,7 @@ def test_grassmann_scf_gradient_decays():
     decays to the fixed point [F, C] = 0 (F diagonal in the occupied
     subspace)."""
     n, h, eri, S, nuc = ao_integrals(LIH, "sto-3g")
-    E, P, C, grads, dists = grassmann_scf(h, eri, S, 2)
+    E, P, C, C_o, grads, dists = grassmann_scf(h, eri, S, 2)
     assert grads[0] > grads[-1]
     assert grads[-1] < 1e-9   # the fixed point (F C subset span(C))
 
@@ -88,11 +89,11 @@ def test_full_pipeline_equals_fci():
     from openfermion import MolecularData
     from openfermionpyscf import run_pyscf
     n, h, eri, S, nuc = ao_integrals(LIH, "sto-3g")
-    E, P, C, _, _ = grassmann_scf(h, eri, S, 2)
+    E, P, C, C_o, _, _ = grassmann_scf(h, eri, S, 2)
     X = np.asarray(sqrtm(np.linalg.inv(S)).real)
     h_o = X.T @ h @ X
-    eri_o = np.einsum("ia,jb,kc,ld,ijkl->abcd", X, X, X, X, eri)
-    F = fock_matrix(h_o, eri_o, P)
+    eri_o = mo_transform(X, eri)
+    F = fock_matrix(h_o, eri_o, 2.0 * C_o @ C_o.T)
     _, C_all = np.linalg.eigh(F)
     o = C_all.T @ h_o @ C_all
     t = np.einsum("ia,jb,kc,ld,ijkl->abcd", C_all, C_all, C_all, C_all,
