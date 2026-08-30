@@ -34,48 +34,59 @@ H2O = [["O", [0, 0, 0]], ["H", [0.757, 0.586, 0]],
        ["H", [-0.757, 0.586, 0]]]
 
 
-def test_jw_matches_fci_any_molecule():
-    for name, geom in [("H2", H2), ("LiH", LIH_16), ("H2O", H2O)]:
-        n, diag, off, gs, E0, fci = molecule_hamiltonian(geom)
+@pytest.fixture(scope="module")
+def systems():
+    """FCI/Hamiltonian generation is expensive (~50s per molecule);
+    share it across the tests in this module."""
+    out = {}
+    for name, geom in [("H2", H2), ("LiH13", LIH_13), ("LiH16", LIH_16),
+                       ("LiH20", LIH_20), ("H2O", H2O)]:
+        out[name] = molecule_hamiltonian(geom)
+    return out
+
+
+def test_jw_matches_fci_any_molecule(systems):
+    for name in ("H2", "LiH16", "H2O"):
+        n, diag, off, gs, E0, fci = systems[name]
         assert abs(E0 - fci) < 1e-8
         assert abs(energy(gs, diag, off) - E0) < 1e-8
 
 
-def test_lih_potential_curve_inside_chemical_accuracy():
+def test_lih_potential_curve_inside_chemical_accuracy(systems):
     """Same pipeline, three bond lengths: all inside 1.6e-3 Ha."""
-    for geom in (LIH_13, LIH_16, LIH_20):
-        n, diag, off, gs, E0, fci = molecule_hamiltonian(geom)
+    for name in ("LiH13", "LiH16", "LiH20"):
+        n, diag, off, gs, E0, fci = systems[name]
         psi = evolve(n, diag, off, 100, 40)
         E = energy(psi, diag, off)
         assert abs(E - E0) < 1.6e-3
         assert abs(np.vdot(gs, psi)) ** 2 > 0.99
 
 
-def test_particle_number_sector_automatic():
+def test_particle_number_sector_automatic(systems):
     """The diagonal-ground-state start is automatically in the correct
     particle-number sector (no hand projection needed)."""
-    for geom, n_e in [(LIH_16, 4), (H2O, 10)]:
-        n, diag, off, gs, E0, fci = molecule_hamiltonian(geom)
+    for name, n_e in [("LiH16", 4), ("H2O", 10)]:
+        n, diag, off, gs, E0, fci = systems[name]
         idx0 = int(np.argmin(diag.real))
         assert bin(idx0).count("1") == n_e
         psi = evolve(n, diag, off, 50, 20)
         assert abs(particle_number(psi, n) - n_e) < 1e-6
 
 
-def test_h2_uniform_pipeline_inside_chemical_accuracy():
+def test_h2_uniform_pipeline_inside_chemical_accuracy(systems):
     """The uniform pipeline on H2 with dt=0.2 (p=200, T=40) reaches
     chemical accuracy (measured err 5.8e-4)."""
-    n, diag, off, gs, E0, fci = molecule_hamiltonian(H2)
+    n, diag, off, gs, E0, fci = systems["H2"]
     psi = evolve(n, diag, off, 200, 40)
     E = energy(psi, diag, off)
     assert abs(E - E0) < 1.6e-3
     assert abs(np.vdot(gs, psi)) ** 2 > 0.99
 
 
-def test_h2o_inside_chemical_accuracy_with_small_dt():
+def test_h2o_inside_chemical_accuracy_with_small_dt(systems):
     """The earlier H2O 'plateau' was a Trotter-step artifact: with
     dt=0.1 (p=400, T=40) H2O reaches chemical accuracy (err 1.0e-3)."""
-    n, diag, off, gs, E0, fci = molecule_hamiltonian(H2O)
+    n, diag, off, gs, E0, fci = systems["H2O"]
     psi = evolve(n, diag, off, 400, 40)
     E = energy(psi, diag, off)
     assert abs(E - E0) < 1.6e-3

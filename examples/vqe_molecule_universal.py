@@ -78,6 +78,38 @@ def molecule_hamiltonian(geometry, basis="sto-3g"):
     return n, diag, off_terms, v[:, 0], float(w[0]), float(mol.fci_energy)
 
 
+_PAULI_PRECOMP = {}
+
+
+def _precomp(ax, n):
+    """Cached (permutation, sign) for the Pauli action P|psi>:
+    P|psi>[i] = psi[perm[i]] * sign[i].  Building this once per axis
+    avoids the per-call index/sign reconstruction inside
+    pauli_action_on_state (the H2O run is 552 terms x 16384 x p)."""
+    key = ax
+    if key not in _PAULI_PRECOMP:
+        d = 2 ** len(ax)
+        idx = np.arange(d)
+        for q, ch in enumerate(ax):
+            if ch in "XY":
+                idx = idx ^ (1 << (len(ax) - 1 - q))
+        sign = np.ones(d)
+        for q, ch in enumerate(ax):
+            if ch in "ZY":
+                b = ((np.arange(d) >> (len(ax) - 1 - q)) & 1).astype(float)
+                sign *= (1 - 2 * b)
+        _PAULI_PRECOMP[key] = (idx, sign, 1j ** ax.count("Y"))
+    return _PAULI_PRECOMP[key]
+
+
+def _rot(ax, theta, psi):
+    """R_ax(theta)|psi> = cos(th/2)|psi> - i sin(th/2) P|psi> with the
+    precompiled Pauli action."""
+    idx, sign, ph = _precomp(ax, len(ax))
+    return (np.cos(theta / 2) * psi
+            - 1j * np.sin(theta / 2) * ph * (psi[idx] * sign))
+
+
 def evolve(n, diag, off, p, T):
     """Zero-gradient discrete adiabatic, diagonal -> full path."""
     d = 2**n
@@ -90,7 +122,7 @@ def evolve(n, diag, off, p, T):
         s = (k + 0.5) / p
         psi = psi * phase
         for c, ax in off:
-            psi = rotation_action_closed_form(ax, 2 * dt * s * c, psi)
+            psi = _rot(ax, 2 * dt * s * c, psi)
     return psi
 
 

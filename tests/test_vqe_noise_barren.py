@@ -85,6 +85,8 @@ def test_trainability_collapses_with_noise(setup):
     """Fixed-step SGD: the pure-state energy of the final theta gets
     monotonically worse with noise (Adam would mask the contraction)."""
     s = setup
-    _, e0 = noisy_vqe(N, L, 0.0, s["gates"], s["base"], s["H"])
-    _, e6 = noisy_vqe(N, L, 0.6, s["gates"], s["base"], s["H"])
+    _, e0 = noisy_vqe(N, L, 0.0, s["gates"], s["base"], s["H"],
+                     steps=300)
+    _, e6 = noisy_vqe(N, L, 0.6, s["gates"], s["base"], s["H"],
+                     steps=300)
     assert e6 > e0  # worse (less negative) under noise

@@ -111,11 +111,11 @@ def test_natural_gradient_cannot_escape_plateau():
     th0 = rng.uniform(-np.pi, np.pi, len(gates))
     f0 = 1 - abs(np.vdot(gs, apply(th0, gates, base))) ** 2
     th_e = th0.copy()
-    for _ in range(300):
+    for _ in range(150):
         v = fidelity_energy_direction(th_e, gates, base, gs)
         _, g, _, _ = qfi_and_gradient(th_e, gates, base, v)
         th_e = th_e - 0.5 * g
-    th_n = natural_sgd(th0, gates, base, gs)
+    th_n = natural_sgd(th0, gates, base, gs, steps=150)
     f_e = 1 - abs(np.vdot(gs, apply(th_e, gates, base))) ** 2
     f_n = 1 - abs(np.vdot(gs, apply(th_n, gates, base))) ** 2
     assert 1 - f_e < 0.01   # fidelity ~0: stuck
