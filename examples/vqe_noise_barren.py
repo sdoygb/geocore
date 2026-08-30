@@ -42,13 +42,22 @@ def _depol(rho, lam, d):
     return (1 - lam) * rho + lam / d * np.eye(d)
 
 
+_P_CACHE = {}
+
+
 def _pauli_mat(ax, d):
-    P = np.zeros((d, d), dtype=complex)
-    for i in range(d):
-        e = np.zeros(d, dtype=complex)
-        e[i] = 1
-        P[:, i] = pauli_action_on_state(ax, e)
-    return P
+    """Pauli matrix for a (fixed) axis — CACHED (the naive rebuild is
+    O(d^2) pauli_action calls per invocation and dominated the runtime
+    of the density-matrix tests)."""
+    key = (ax, d)
+    if key not in _P_CACHE:
+        P = np.zeros((d, d), dtype=complex)
+        for i in range(d):
+            e = np.zeros(d, dtype=complex)
+            e[i] = 1
+            P[:, i] = pauli_action_on_state(ax, e)
+        _P_CACHE[key] = P
+    return _P_CACHE[key]
 
 
 def _rho_forward(n, L, lam, gates, th, base):
@@ -69,8 +78,10 @@ def _rho_forward(n, L, lam, gates, th, base):
 
 
 def _rot_mat(ax, th, d):
-    return (np.cos(th / 2) * np.eye(d)
-            - 1j * np.sin(th / 2) * _pauli_mat(ax, d))
+    # vectorized with the cached Pauli matrix
+    c = np.cos(th / 2)
+    si = -1j * np.sin(th / 2)
+    return c * np.eye(d) + si * _pauli_mat(ax, d)
 
 
 def _grad_slot(j, gates, th, rhos, L, lam, H, d, block):
