@@ -100,9 +100,11 @@ def exterior_sector(n, N, o, t, const, eps=0.0):
 def adiabatic_path(H_off, hd, p, T):
     """The zero-gradient discrete adiabatic path psi_0..psi_p in the
     sector (H(s) = H_diag + s H_off, init = diagonal ground state),
-    using exact sparse exponentials (no Trotter)."""
+    using exact sparse exponentials (no Trotter).  H_off may be a
+    sparse matrix or a scipy LinearOperator (matrix-free exterior
+    action, feature 49); hd may be a zero vector in that case."""
     from scipy import sparse
-    from scipy.sparse.linalg import expm_multiply
+    from scipy.sparse.linalg import expm_multiply, LinearOperator
     dim = hd.size
     i0 = int(np.argmin(hd))
     psi = np.zeros(dim, dtype=complex)
@@ -111,8 +113,21 @@ def adiabatic_path(H_off, hd, p, T):
     dt = T / p
     for k in range(p):
         s = (k + 0.5) / p
-        Hs = sparse.diags(hd) + s * H_off
-        psi = expm_multiply(-1j * dt * Hs, psi)
+        if sparse.issparse(H_off):
+            Hs = sparse.diags(hd) + s * H_off
+            psi = expm_multiply(-1j * dt * Hs, psi)
+        else:
+            # matrix-free exterior action: fold -1j*dt into the matvec
+            # (never pre-scale the LinearOperator — scipy's scaled
+            # operator lacks a matvec implementation); keep the input
+            # shape so expm_multiply's trace estimation (matmat) works
+            def _matvec(v, s=s):
+                shp = np.shape(v)
+                v1 = np.asarray(v).reshape(-1)
+                r = (-1j * dt) * (hd * v1 + s * (H_off @ v1))
+                return r.reshape(shp) if len(shp) > 1 else r
+            Hs = LinearOperator((dim, dim), matvec=_matvec, dtype=complex)
+            psi = expm_multiply(Hs, psi)
         path.append(psi.copy())
     for i in range(p + 1):
         nrm = np.linalg.norm(path[i])
