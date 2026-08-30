@@ -130,7 +130,7 @@ geocore/
 │   ├── derivatives.py       # analytic derivatives (≈ autograd)
 │   ├── rotations.py         # rotation-chain optimization (verified)
 │   └── verify.py            # machine-precision verification harness
-└── tests/                   # 285 tests
+└── tests/                   # 289 tests
 ```
 
 ## Riemannian optimizer (≈ torch.optim)
@@ -881,6 +881,27 @@ Zero-gradient discrete evolution on the diagonal→full path:
 The first real molecule beyond the 2-qubit H2 reduction, solved with
 zero gradients (the plateau never enters).  Requires openfermion.
 
+### Quantum: noise-induced barren plateaus (`examples/vqe_noise_barren.py`)
+
+The exact gradient mechanism of NIBP (Wang et al. 2021; Quantum 2025),
+machine-verified with the feature-34 noise geometry + exact rotation
+derivatives on a system TRAINABLE without noise (Ising n=6 local cost,
+grad RMS 0.67):
+
+```
+[A] gradient contraction, depolarizing λ after each of L=2 layers:
+      λ=0.0 grad 0.667 | λ=0.2 0.478 | λ=0.5 0.255 | λ=0.8 0.091
+      -> grad ~ grad(0) * (1-λ)^{L_eff}, L_eff in (1,L): EXPONENTIAL
+         in depth, linear for a single noise point (feature 34)
+[B] trainability collapse (fixed-step SGD 600, the pure energy of the
+    final theta): λ=0 err +0.35 | λ=0.3 +0.41 | λ=0.6 +0.60
+    (Adam masks the contraction — the feature-32 effect, reported)
+```
+
+The chain-rule noisy gradient equals the pure gradient at λ=0 to
+1e-15 (exact).  Honest: this is the exact depth mechanism of NIBP; the
+width mechanism (feature 31) sits on top.
+
 ### Quantum: there is no absolute plateau (`examples/vqe_relative_plateau.py`)
 
 The classic demonstration of relative barrenness (article 10.86 §9):
@@ -1227,6 +1248,13 @@ Done so far — each with machine-precision verification + measured benchmark:
      under discrete evolution (fid 0.972): there is no absolute
      plateau, only a tool-system mismatch (article 10.86 §9); the
      anchor's existence (L>=1), not the layer count, is the lever.
+ 44. ✅ Quantum: noise-induced barren plateaus — the exact gradient
+     mechanism: noisy gradient ~ (1−λ)^{L_eff} (exponential in depth,
+     linear for one noise point), machine-verified on a noiseless-
+     trainable system (Ising n=6: grad 0.667 → 0.091 at λ=0.8);
+     trainability collapses monotonically under fixed-step SGD (Adam
+     masks it — feature-32 effect); chain-rule gradient = pure at
+     λ=0 to 1e-15.  The depth mechanism of NIBP, quantified exactly.
 
 Next candidates (hypotheses to measure, not claims):
 - The noise spectrum as a table: all four fingerprints side by side,

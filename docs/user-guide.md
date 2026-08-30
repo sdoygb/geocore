@@ -167,10 +167,10 @@ measured performance — not breadth.
 
 ## Roadmap
 
-Done: 43 features, 285 tests (incl. ~700 fuzz cases + real-data tests +
+Done: 44 features, 289 tests (incl. ~700 fuzz cases + real-data tests +
 PyTorch comparisons + VQE + barren-plateau diagnostics + pre-training
 mitigation + geometric-root analysis + noise geometry series (4
 fingerprints) + QAOA gradient geometry + spectrum-guided
 parameterization + discrete dynamic evolution + evolution scaling +
-LiH molecule + input universality + relative
-plateau), 12 measured shortcuts (see catalog).
+LiH molecule + input universality + relative plateau + noise-induced
+barren plateaus), 12 measured shortcuts (see catalog).
