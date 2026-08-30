@@ -19,11 +19,63 @@ Two entry points:
     (physicist notation, t[p,q,r,s] = t[r,s,p,q]) + optional FCI;
   - molecule_terms              : (n, const, z_terms, off_terms) in
     the legacy Pauli-term format (for the sector/fast/merged builds).
+
+For the Grassmann-manifold SCF (geoqc.scf) the atomic-orbital
+integrals are needed:
+
+  - ao_integrals                 : (n, h_core, eri, nuc) in the AO
+    basis (chemist notation (ij|kl)) from pyscf's GTO numerical
+    integrals — the physics input of the SCF step itself.
 """
 
 import numpy as np
 
-__all__ = ["integrals_from_openfermion", "molecule_terms"]
+__all__ = ["integrals_from_openfermion", "molecule_terms", "ao_integrals",
+           "spin_orbital_integrals"]
+
+
+def spin_orbital_integrals(o, t):
+    """Spatial (RHF) -> spin-orbital integrals in the interleaved
+    order (alpha_k = 2k, beta_k = 2k+1), in openfermion's stored
+    two_body_tensor layout (reverse-engineered element-wise from
+    openfermion and verified via InteractionOperator -> FCI):
+    t_s[p,q,r,s] = (1/2) (a_p a_s | a_q a_r)  [chemist notation],
+    with the SPIN MATCHING sigma_p = sigma_s AND sigma_q = sigma_r,
+    and the 1/2 of H2 folded inside the tensor."""
+    n = o.shape[0]
+    ns = 2 * n
+    o_s = np.zeros((ns, ns), dtype=complex)
+    t_s = np.zeros((ns, ns, ns, ns), dtype=complex)
+    for i in range(n):
+        for j in range(n):
+            o_s[2 * i, 2 * j] = o[i, j]          # alpha-alpha
+            o_s[2 * i + 1, 2 * j + 1] = o[i, j]  # beta-beta
+    for a in range(n):
+        for b in range(n):
+            for c in range(n):
+                for d in range(n):
+                    v = 0.5 * t[a, d, b, c]      # (a d | b c) / 2
+                    t_s[2 * a,     2 * b,     2 * c,     2 * d] = v      # aaaa
+                    t_s[2 * a + 1, 2 * b + 1, 2 * c + 1, 2 * d + 1] = v  # bbbb
+                    t_s[2 * a,     2 * b + 1, 2 * c + 1, 2 * d] = v      # abba
+                    t_s[2 * a + 1, 2 * b,     2 * c,     2 * d + 1] = v  # baab
+    return o_s, t_s
+
+
+def ao_integrals(geometry, basis="sto-3g"):
+    """(n, h_core, eri, S, nuc) — the atomic-orbital integrals from
+    pyscf's GTO numerical evaluation (the physics input of the SCF
+    step, honestly labelled: numerical GTO integrals are standard
+    mathematics, not geometry).  h_core = kinetic + nuclear, eri in
+    chemist notation (ij|kl), eight-fold symmetric, S the overlap."""
+    from pyscf import gto
+    mol = gto.M(atom=geometry, basis=basis)
+    n = mol.nao_nr()
+    h_core = mol.intor("int1e_kin") + mol.intor("int1e_nuc")
+    eri = mol.intor("int2e")
+    S = mol.intor("int1e_ovlp")
+    return (n, np.asarray(h_core), np.asarray(eri), np.asarray(S),
+            float(mol.energy_nuc()))
 
 
 def integrals_from_openfermion(geometry, basis, run_fci=False):
