@@ -62,12 +62,21 @@ def test_particle_number_sector_automatic():
         assert abs(particle_number(psi, n) - n_e) < 1e-6
 
 
-def test_h2_uniform_pipeline_close_to_chemical_accuracy():
-    """The uniform (zero hand-tuning) pipeline on H2: error below 0.01
-    Ha (near chemical accuracy; the purpose-built H2 path of feature 40
-    is tighter at 1e-4)."""
+def test_h2_uniform_pipeline_inside_chemical_accuracy():
+    """The uniform pipeline on H2 with dt=0.2 (p=200, T=40) reaches
+    chemical accuracy (measured err 5.8e-4)."""
     n, diag, off, gs, E0, fci = molecule_hamiltonian(H2)
-    psi = evolve(n, diag, off, 100, 40)
+    psi = evolve(n, diag, off, 200, 40)
     E = energy(psi, diag, off)
-    assert abs(E - E0) < 0.01
-    assert abs(np.vdot(gs, psi)) ** 2 > 0.98
+    assert abs(E - E0) < 1.6e-3
+    assert abs(np.vdot(gs, psi)) ** 2 > 0.99
+
+
+def test_h2o_inside_chemical_accuracy_with_small_dt():
+    """The earlier H2O 'plateau' was a Trotter-step artifact: with
+    dt=0.1 (p=400, T=40) H2O reaches chemical accuracy (err 1.0e-3)."""
+    n, diag, off, gs, E0, fci = molecule_hamiltonian(H2O)
+    psi = evolve(n, diag, off, 400, 40)
+    E = energy(psi, diag, off)
+    assert abs(E - E0) < 1.6e-3
+    assert abs(np.vdot(gs, psi)) ** 2 > 0.99

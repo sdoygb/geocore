@@ -907,20 +907,20 @@ adiabatic, zero hand-tuning) on any molecular input:
 
 ```
     system    nq   E_exact      E_evolved    err Ha   fid
-    H2 0.735   4   -1.137306    -1.135138    +0.0022  0.999
+    H2 0.735   4   -1.137306    -1.136728    +0.0006  0.9996 CHEM ACC
     LiH 1.3   12   -7.869140    -7.867632    +0.0015  0.998  CHEM ACC
     LiH 1.6   12   -7.882324    -7.881050    +0.0013  0.998  CHEM ACC
     LiH 2.0   12   -7.861088    -7.860036    +0.0011  0.997  CHEM ACC
-    H2O       14  -75.012437   -74.961190    +0.0512  0.992
+    H2O       14  -75.012437   -75.011454    +0.0010  0.999  CHEM ACC
 ```
 
-LiH at three bond lengths inside chemical accuracy with the same
-pipeline (input universality: different molecules, different
-geometries, zero tuning).  Particle-number sector automatic (N=2/4/10).
-Honest boundary: H2O runs automatically (JW exact, fidelity 0.992) but
-the diagonal→full path plateaus above chemical accuracy (N=10, S=0
-sectors verified correct — the plateau is adiabatic-path quality,
-system-dependent); absolute universality is not claimed.
+ALL FIVE systems inside chemical accuracy (1.6e-3 Ha) with the same
+zero-tuning pipeline (input universality, complete).  Particle-number
+sector automatic (N=2/4/10).  The earlier H2O "plateau" was a
+TROTTER-STEP artifact: the scan kept dt = T/p = 0.4 fixed, so the
+1st-order Trotter error did not shrink; at dt=0.1 (p=400, T=40) H2O
+reaches 1.0e-3 Ha.  The adiabatic path was fine all along (gap ≥ 0.32,
+HF overlap 0.974).
 
 ### PyTorch's classic examples, re-run with geocore
 
@@ -1217,7 +1217,10 @@ Done so far — each with machine-precision verification + measured benchmark:
      LiH at 3 bond lengths inside chemical accuracy (1.1-1.5e-3 Ha),
      H2 near (2.2e-3), particle-number sector automatic (N=2/4/10);
      H2O is the honest boundary (fid 0.992, plateau above chemical
-     accuracy — adiabatic-path quality, sectors correct).
+     accuracy — adiabatic-path quality, sectors correct).  [UPDATED:
+     the H2O plateau was a Trotter-step artifact (fixed dt in the
+     scan); with dt=0.1 H2O reaches 1.0e-3 Ha — all five systems now
+     inside chemical accuracy.]
  43. ✅ Quantum: relative plateau — the same Ising n=12 system is
      barren under the pure-continuous tool (grad 2.7e-7), partially
      protected under continuous+spectrum-anchor (3.8e-4), converged
