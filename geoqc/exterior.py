@@ -69,6 +69,154 @@ def _sign_array(z, q, n):
     return 1.0 - 2.0 * (cnt & 1)
 
 
+def sector_states_sz(n, N, sz):
+    """N-sector states with spin projection S_z = sz (2*sz = n_alpha -
+    n_beta), interleaved spin order (alpha_k = 2k, beta_k = 2k+1):
+    dim = C(n/2, n_alpha) * C(n/2, n_beta)."""
+    n_alpha = (N + 2 * sz) // 2
+    n_beta = N - n_alpha
+    n_orb = n // 2
+    alphas = [sum(1 << (n - 1 - 2 * i) for i in c)
+              for c in combinations(range(n_orb), n_alpha)]
+    betas = [sum(1 << (n - 2 - 2 * i) for i in c)
+             for c in combinations(range(n_orb), n_beta)]
+    return [a | b for a in alphas for b in betas]
+
+
+def exterior_hamiltonian_sz(n, N, sz, o, t, const, eps=0.0):
+    """(hd, H_off) in the S_z sector: states = alpha-choose x
+    beta-choose (S_z conserved by any molecular Hamiltonian), terms
+    filtered by S_z conservation, source combinations decomposed into
+    alpha x beta outer products (vectorised).  Machine-verified equal
+    to the full-N-sector build restricted to the sector."""
+    from scipy import sparse
+    n_a = (N + 2 * sz) // 2
+    n_b = N - n_a
+    n_orb = n // 2
+    states = sector_states_sz(n, N, sz)
+    idx = {z: i for i, z in enumerate(states)}
+    dim = len(states)
+    szv = np.array(states, dtype=np.int64)
+    hd = np.full(dim, const, dtype=complex)
+    for p in range(n):
+        hd += o[p, p] * ((szv >> (n - 1 - p)) & 1)
+    rows_l, cols_l, vals_l = [], [], []
+
+    def emit(zs, zts, phs):
+        zs = np.asarray(zs, dtype=np.int64)
+        zts = np.asarray(zts, dtype=np.int64)
+        rows_l.append(np.fromiter((idx[z] for z in zts), dtype=np.int64,
+                                  count=len(zts)))
+        cols_l.append(np.fromiter((idx[z] for z in zs), dtype=np.int64,
+                                  count=len(zs)))
+        vals_l.append(phs)
+
+    # ---- one-body: same-spin only (cross-spin moves S_z) ----
+    for p in range(n):
+        for q in range(n):
+            if p == q or abs(o[p, q]) <= eps:
+                continue
+            if (p & 1) != (q & 1):
+                continue
+            is_beta = bool(p & 1)
+            # q (alpha or beta orbital kq) occupied, p empty; the other
+            # same-spin orbitals supply the rest, opposite spin free
+            kq = q // 2
+            kp = p // 2
+            if is_beta:
+                fixed = 1 << (n - 2 - 2 * kq)
+                rest_spin = [k for k in range(n_orb)
+                             if k != kq and k != kp]
+                need = n_b - 1
+                opp_comb = combinations(range(n_orb), n_a)
+                spin_comb = combinations(range(n_orb - 2), need)
+                flip = (1 << (n - 2 - 2 * kp)) ^ (1 << (n - 2 - 2 * kq))
+            else:
+                fixed = 1 << (n - 1 - 2 * kq)
+                rest_spin = [k for k in range(n_orb)
+                             if k != kq and k != kp]
+                need = n_a - 1
+                opp_comb = combinations(range(n_orb), n_b)
+                spin_comb = combinations(range(n_orb - 2), need)
+                flip = (1 << (n - 1 - 2 * kp)) ^ (1 << (n - 1 - 2 * kq))
+            rest_a = np.array(rest_spin, dtype=np.int64)
+            c_spin = np.array(list(spin_comb), dtype=np.int64)
+            c_opp = np.array(list(opp_comb), dtype=np.int64)
+            z_spin = np.full(c_spin.shape[0], fixed, dtype=np.int64)
+            for i in range(need):
+                z_spin |= 1 << (n - 1 - 2 * rest_a[c_spin[:, i]]) \
+                    if not is_beta else 1 << (n - 2 - 2 * rest_a[c_spin[:, i]])
+            z_opp = np.zeros(c_opp.shape[0], dtype=np.int64)
+            for i in range(n_a if is_beta else n_b):
+                z_opp |= (1 << (n - 1 - 2 * c_opp[:, i])
+                          if is_beta else 1 << (n - 2 - 2 * c_opp[:, i]))
+            z = (z_spin[:, None] | z_opp[None, :]).ravel()
+            z1 = z ^ (1 << (n - 1 - q)) ^ (1 << (n - 1 - p))
+            sgn = _sign_array(z, q, n) * _sign_array(z1, p, n)
+            emit(z, z1, o[p, q] * sgn)
+
+    # ---- two-body: S_z-conserving patterns (creation/annihilation
+    # alpha counts equal): same-spin (aaaa/bbbb) or mixed (abba/baab
+    # in the openfermion layout: sigma_p = sigma_s, sigma_q = sigma_r)
+    for p in range(n):
+        for q in range(p + 1, n):
+            for r in range(n):
+                for s in range(r + 1, n):
+                    c2 = 2.0 * (t[p, q, r, s] - t[p, q, s, r])
+                    if abs(c2) <= eps:
+                        continue
+                    sp, sq, sr, ss = p & 1, q & 1, r & 1, s & 1
+                    # S_z conservation: #alpha created == #alpha
+                    # annihilated (the molecular H conserves S_z)
+                    a_cre = (1 - sp) + (1 - sq)
+                    a_ann = (1 - sr) + (1 - ss)
+                    if a_cre != a_ann:
+                        continue
+                    # sources: r, s occupied; p, q empty.  Count alpha
+                    # needs: alpha occupied among {r,s}, alpha empty
+                    # among {p,q} (p,q empty by construction)
+                    a_occ = sum(1 for x in (r, s) if x % 2 == 0)
+                    a_emp = sum(1 for x in (p, q) if x % 2 == 0)
+                    rest = [u for u in range(n) if u not in (p, q, r, s)]
+                    rest_a = np.array(rest, dtype=np.int64)
+                    if len(rest) < N - 2:
+                        continue
+                    combs = np.array(list(combinations(
+                        range(len(rest)), N - 2)), dtype=np.int64)
+                    if combs.size == 0:
+                        continue
+                    z = np.full(combs.shape[0],
+                                (1 << (n - 1 - r)) | (1 << (n - 1 - s)),
+                                dtype=np.int64)
+                    for i in range(N - 2):
+                        z |= 1 << (n - 1 - rest_a[combs[:, i]])
+                    # keep only S_z-sector sources (alpha count = n_a)
+                    amask = np.int64(0)
+                    for k in range(n_orb):
+                        amask |= np.int64(1) << (n - 1 - 2 * k)
+                    a_cnt = _popcount64(z & amask)
+                    keep = a_cnt == n_a
+                    if not keep.any():
+                        continue
+                    z = z[keep]
+                    sgn = _sign_array(z, s, n)
+                    z1 = z ^ (1 << (n - 1 - s))
+                    sgn *= _sign_array(z1, r, n)
+                    z2 = z1 ^ (1 << (n - 1 - r))
+                    sgn *= _sign_array(z2, q, n)
+                    z3 = z2 ^ (1 << (n - 1 - q))
+                    sgn *= _sign_array(z3, p, n)
+                    zt = z3 ^ (1 << (n - 1 - p))
+                    emit(z, zt, c2 * sgn)
+
+    rows = np.concatenate(rows_l)
+    cols = np.concatenate(cols_l)
+    vals = np.concatenate(vals_l)
+    H_off = sparse.coo_matrix((vals, (rows, cols)),
+                              shape=(dim, dim)).tocsr()
+    return hd, H_off
+
+
 def exterior_hamiltonian(n, N, o, t, const, eps=0.0):
     """(hd, H_off) in the N-sector basis, built by the exterior
     (fermionic) action directly — no Pauli expansion.  Vectorised:
