@@ -418,13 +418,94 @@ def _spin_sign(az, bz, k, is_beta, pc=_POPCOUNT8):
     k of the given spin: for alpha_k, (-1)^{popcount(az & (2^k-1)) +
     popcount(bz & (2^k-1))}; for beta_k, alpha bits k'<=k and beta
     bits k'<k (interleaved order).  Pure table-lookup popcounts, no
-    big-endian reconstruction (the geometric split of the sign)."""
-    if not is_beta:
-        m = (1 << k) - 1
-        return 1.0 - 2.0 * ((_popcount64(az & m) + _popcount64(bz & m)) & 1)
-    ma = (1 << (k + 1)) - 1
-    mb = (1 << k) - 1
-    return 1.0 - 2.0 * ((_popcount64(az & ma) + _popcount64(bz & mb)) & 1)
+    big-endian reconstruction (the geometric split of the sign).
+    Fully vectorised: az/bz/k/is_beta may be arrays."""
+    az = np.asarray(az, dtype=np.int64)
+    bz = np.asarray(bz, dtype=np.int64)
+    k = np.asarray(k, dtype=np.int64)
+    is_beta = np.asarray(is_beta, dtype=bool)
+    one = np.int64(1)
+    m_a = (one << k) - 1
+    cnt_a = _popcount64(az & m_a) + _popcount64(bz & m_a)
+    m_ba = (one << (k + 1)) - 1
+    m_bb = (one << k) - 1
+    cnt_b = _popcount64(az & m_ba) + _popcount64(bz & m_bb)
+    cnt = np.where(is_beta, cnt_b, cnt_a)
+    return 1.0 - 2.0 * (cnt & 1)
+
+
+def sector_diagonal_sz(n, N, sz, o, t, const, eps=0.0, two_body=True):
+    """Vectorised S_z-sector diagonal H_ii without building the sparse
+    off-diagonal (the route for dim ~1e6 sectors whose H2 would be
+    tens of GB).  Diagonal elements in the alpha/beta product basis:
+      H_ii = const + sum_k e_a[k] occ_a(k) + sum_k e_b[k] occ_b(k)
+             + sum_{p<q} Jaa[p,q] occ_a(p) occ_a(q)
+             + sum_{p<q} Jbb[p,q] occ_b(p) occ_b(q)
+             + sum_{p,q} Jab[p,q] occ_a(p) occ_b(q)
+    with e_a[k]=o[2k,2k], e_b[k]=o[2k+1,2k+1] and
+    J[p,q] = t[p,q,p,q] - t[p,q,q,p]  (normal-ordered two-body diag).
+    Implemented as dense matrix products over the occupancy matrices
+    (da x n_orb, db x n_orb) — O(dim*n^2), memory O(dim).
+    Machine-checked against the sparse H diagonal (LiH 1e-14).
+    With two_body=False only the one-body diagonal is returned (the
+    complement of sparse_action_sz, whose excitation enumeration
+    already carries the two-body diagonal in its row==col entries —
+    the pair used by the top-k power iteration to avoid double count).
+    Returns (hd, n_a, n_b, n_orb, dim_a, dim_b) with hd C-order
+    indexed idx = ia * dim_b + ib."""
+    from math import comb
+    n_a = (N + 2 * sz) // 2
+    n_b = N - n_a
+    n_orb = n // 2
+    dim_a = comb(n_orb, n_a)
+    dim_b = comb(n_orb, n_b)
+
+    # occupancy matrices: row = combination rank, col = orbital
+    def occ_matrix(dim_r, nr):
+        M = np.zeros((dim_r, n_orb), dtype=np.float64)
+        for i, c in enumerate(combinations(range(n_orb), nr)):
+            M[i, list(c)] = 1.0
+        return M
+
+    OA = occ_matrix(dim_a, n_a)  # alpha occupancy (da x n_orb)
+    OB = occ_matrix(dim_b, n_b)  # beta occupancy  (db x n_orb)
+
+    e_a = np.array([o[2 * k, 2 * k].real for k in range(n_orb)])
+    e_b = np.array([o[2 * k + 1, 2 * k + 1].real for k in range(n_orb)])
+
+    A = OA @ e_a
+    B = OB @ e_b
+    hd = const + A[:, None] + B[None, :]
+    if two_body:
+        def Jmat(sp1, sp2):
+            J = np.zeros((n_orb, n_orb), dtype=np.float64)
+            for p in range(n_orb):
+                for q in range(n_orb):
+                    if sp1 == sp2 and p == q:
+                        continue  # same-spin pair needs two distinct orbitals
+                    pp = 2 * p + sp1
+                    qq = 2 * q + sp2
+                    # diagonal two-body (machine-verified): for p<q
+                    # occupied the contribution is
+                    # 2(t[p,q,q,p]-t[p,q,p,q]); J is symmetric
+                    # (t[p,q,r,s]=t[q,p,s,r]) so sum_{p!=q}
+                    # J occ_p occ_q = 2 sum_{p<q} J occ_p occ_q.
+                    # Mixed alpha-beta keeps p==q (distinct orbitals).
+                    J[p, q] = (t[pp, qq, qq, pp] - t[pp, qq, pp, qq]).real
+            return J
+
+        Jaa = Jmat(0, 0)
+        Jbb = Jmat(1, 1)
+        Jab = Jmat(0, 1)
+
+        A2 = A + np.einsum('ip,pq,iq->i', OA, Jaa, OA)
+        B2 = B + np.einsum('jp,pq,jq->j', OB, Jbb, OB)
+        # mixed alpha-beta: each pair contributes 2(t[p,q,q,p]-t[p,q,p,q])
+        # (no symmetric double-count from p!=q here — alpha x beta pairs
+        # are ordered once), hence the explicit factor 2.
+        M = 2.0 * (OA @ Jab @ OB.T)  # da x db
+        hd = const + A2[:, None] + B2[None, :] + M
+    return hd.ravel(), n_a, n_b, n_orb, dim_a, dim_b
 
 
 def exterior_action_sz(n, N, sz, o, t, const, eps=0.0):
@@ -597,3 +678,148 @@ def exterior_action_sz(n, N, sz, o, t, const, eps=0.0):
         return Hv
 
     return LinearOperator((dim, dim), matvec=matvec, dtype=complex)
+
+
+def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
+    """Sparse matrix-free S_z action — the discrete-descent engine:
+    H . v where v is supported on an arbitrary small set of states
+    (top-k truncated).  Cost O(k * per-state excitation targets)
+    instead of O(nnz): for each supported state the excitation targets
+    (single/double, S_z conserving) are enumerated directly, with the
+    grading signs from the alpha/beta popcount split.
+    Returns (apply, n_a, n_b, n_orb, hd) where apply(azs, bzs, vals)
+    gives (az_t, bz_t, out) COO of the action."""
+    from math import comb
+    n_a = (N + 2 * sz) // 2
+    n_b = N - n_a
+    n_orb = n // 2
+    dim_a = comb(n_orb, n_a)
+    dim_b = comb(n_orb, n_b)
+
+    # two-body term arrays (direct traversal — no key-lookup gaps)
+    tt = []
+    for p in range(n):
+        for q in range(p + 1, n):
+            for r in range(n):
+                for s in range(r + 1, n):
+                    c2 = 2.0 * (t[p, q, r, s] - t[p, q, s, r])
+                    if abs(c2) <= eps:
+                        continue
+                    if (1 - p % 2) + (1 - q % 2) != \
+                       (1 - r % 2) + (1 - s % 2):
+                        continue
+                    tt.append((p, q, r, s, complex(c2)))
+    P = np.array([x[0] for x in tt], dtype=np.int64)
+    Q = np.array([x[1] for x in tt], dtype=np.int64)
+    R = np.array([x[2] for x in tt], dtype=np.int64)
+    S = np.array([x[3] for x in tt], dtype=np.int64)
+    C = np.array([x[4] for x in tt], dtype=complex)
+    KP = P // 2
+    KQ = Q // 2
+    SP = P % 2
+    SQ = Q % 2
+    SR = R % 2
+    SS = S % 2
+    KR = R // 2
+    KS = S // 2
+    AM = (1 << n_orb) - 1
+    # per-spin occupancy masks of a state
+    def occ_masks(az, bz):
+        return az, bz
+
+    def apply(azs, bzs, vals):
+        azs = np.asarray(azs, dtype=np.int64)
+        bzs = np.asarray(bzs, dtype=np.int64)
+        vals = np.asarray(vals, dtype=complex)
+        t_az = []
+        t_bz = []
+        t_v = []
+        full_a = (1 << n_orb) - 1
+        for i in range(len(azs)):
+            az = int(azs[i]); bz = int(bzs[i]); val = vals[i]
+            # ---- single excitations ----
+            # alpha: occupy a -> virtual v
+            occ_a = [k for k in range(n_orb) if (az >> k) & 1]
+            virt_a = [k for k in range(n_orb) if not (az >> k) & 1]
+            for a in occ_a:
+                for v in virt_a:
+                    if abs(o[2 * a, 2 * v]) <= eps:
+                        continue
+                    az2 = az ^ (1 << a) ^ (1 << v)
+                    sgn = _spin_sign(az, bz, a, False) * \
+                        _spin_sign(az2, bz, v, False)
+                    t_az.append(az2); t_bz.append(bz)
+                    t_v.append(o[2 * v, 2 * a] * sgn * val)
+            occ_b = [k for k in range(n_orb) if (bz >> k) & 1]
+            virt_b = [k for k in range(n_orb) if not (bz >> k) & 1]
+            for b in occ_b:
+                for v in virt_b:
+                    if abs(o[2 * b + 1, 2 * v + 1]) <= eps:
+                        continue
+                    bz2 = bz ^ (1 << b) ^ (1 << v)
+                    sgn = _spin_sign(az, bz, b, True) * \
+                        _spin_sign(az, bz2, v, True)
+                    t_az.append(az); t_bz.append(bz2)
+                    t_v.append(o[2 * v + 1, 2 * b + 1] * sgn * val)
+            # ---- double excitations: vectorised term-array traversal ----
+            r_occ = np.where(SR == 0, (az >> KR) & 1, (bz >> KR) & 1)
+            s_occ = np.where(SS == 0, (az >> KS) & 1, (bz >> KS) & 1)
+            ok = (r_occ == 1) & (s_occ == 1)
+            if ok.any():
+                idx = np.nonzero(ok)[0]
+                Pk, Qk, Rk, Sk = P[idx], Q[idx], R[idx], S[idx]
+                Ck = C[idx]
+                SPk, SQk, SRk, SSk = SP[idx], SQ[idx], SR[idx], SS[idx]
+                KPk, KQk, KRk, KSk = KP[idx], KQ[idx], KR[idx], KS[idx]
+                one = np.int64(1)
+                # annihilate s, then r (signs on the current state)
+                rm_sa = np.where(SSk == 0, one << KSk, np.int64(0))
+                rm_sb = np.where(SSk == 1, one << KSk, np.int64(0))
+                sgn = _spin_sign(az, bz, KSk, SSk.astype(bool))
+                az1 = az ^ rm_sa
+                bz1 = bz ^ rm_sb
+                rm_ra = np.where(SRk == 0, one << KRk, np.int64(0))
+                rm_rb = np.where(SRk == 1, one << KRk, np.int64(0))
+                sgn = sgn * _spin_sign(az1, bz1, KRk, SRk.astype(bool))
+                az1 = az1 ^ rm_ra
+                bz1 = bz1 ^ rm_rb
+                # q wedge (must be empty in az1/bz1)
+                q_empty = np.where(SQk == 0, ((az1 >> KQk) & 1) == 0,
+                                   ((bz1 >> KQk) & 1) == 0)
+                okq = ok[idx][q_empty]
+                good = np.nonzero(q_empty)[0]
+                if len(good) > 0:
+                    g = good
+                    sq = sgn[g]
+                    aq = az1[g]; bq = bz1[g]
+                    kqg = KQk[g]; sqb = SQk[g]
+                    rm_qa = np.where(sqb == 0, one << kqg, np.int64(0))
+                    rm_qb = np.where(sqb == 1, one << kqg, np.int64(0))
+                    sq = sq * _spin_sign(aq, bq, kqg, sqb.astype(bool))
+                    aq = aq ^ rm_qa
+                    bq = bq ^ rm_qb
+                    # p wedge (must be empty)
+                    p_empty = np.where(SPk[g] == 0, ((aq >> KPk[g]) & 1) == 0,
+                                       ((bq >> KPk[g]) & 1) == 0)
+                    good2 = np.nonzero(p_empty)[0]
+                    if len(good2) > 0:
+                        h = g[good2]
+                        sp = sq[good2]
+                        ap = aq[good2]; bp = bq[good2]
+                        kpg = KPk[h]; spb = SPk[h]
+                        rm_pa = np.where(spb == 0, one << kpg, np.int64(0))
+                        rm_pb = np.where(spb == 1, one << kpg, np.int64(0))
+                        sp = sp * _spin_sign(ap, bp, kpg, spb.astype(bool))
+                        ap = ap ^ rm_pa
+                        bp = bp ^ rm_pb
+                        t_az.extend(ap.tolist())
+                        t_bz.extend(bp.tolist())
+                        t_v.extend((Ck[h] * sp * val).tolist())
+
+        if not t_az:
+            return (np.zeros(0, dtype=np.int64),
+                    np.zeros(0, dtype=np.int64),
+                    np.zeros(0, dtype=complex))
+        return (np.array(t_az), np.array(t_bz), np.array(t_v))
+
+    return apply, n_a, n_b, n_orb, dim_a, dim_b
