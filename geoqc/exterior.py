@@ -48,49 +48,80 @@ def _bit(q, n):
     return 1 << (n - 1 - q)
 
 
+_POPCOUNT8 = np.array([bin(i).count("1") for i in range(256)],
+                      dtype=np.int64)
+
+
+def _popcount64(x):
+    """Vectorised popcount for uint64 arrays (8-byte table lookup)."""
+    x = np.asarray(x, dtype=np.uint64)
+    return (_POPCOUNT8[x & 0xFF] + _POPCOUNT8[(x >> 8) & 0xFF]
+            + _POPCOUNT8[(x >> 16) & 0xFF] + _POPCOUNT8[(x >> 24) & 0xFF]
+            + _POPCOUNT8[(x >> 32) & 0xFF] + _POPCOUNT8[(x >> 40) & 0xFF]
+            + _POPCOUNT8[(x >> 48) & 0xFF] + _POPCOUNT8[(x >> 56) & 0xFF])
+
+
+def _sign_array(z, q, n):
+    """Vectorised exterior grading sign for orbital q on bitstrings z:
+    (-1)^{# occupied orbitals q' < q} (big-endian)."""
+    mask = (1 << q) - 1
+    cnt = _popcount64((z >> (n - q)) & mask)
+    return 1.0 - 2.0 * (cnt & 1)
+
+
 def exterior_hamiltonian(n, N, o, t, const, eps=0.0):
     """(hd, H_off) in the N-sector basis, built by the exterior
-    (fermionic) action directly — no Pauli expansion.  o: one-body
-    (n x n, Hermitian), t: two-body (n^4, physicist notation with
-    t[p,q,r,s] = t[r,s,p,q]); const: constant.  eps: drop integrals
-    with |value| <= eps (spectral truncation on the integrals)."""
+    (fermionic) action directly — no Pauli expansion.  Vectorised:
+    per-term source combinations are enumerated in numpy, the grading
+    signs come from table-lookup popcounts, and only the index mapping
+    (big-endian bitstring -> sector rank) is a Python dict lookup.
+    o: one-body (n x n, Hermitian), t: two-body (n^4, physicist
+    notation with t[p,q,r,s] = t[r,s,p,q]); const: constant.
+    eps: drop integrals with |value| <= eps."""
     from scipy import sparse
     states = sector_states(n, N)
     idx = {z: i for i, z in enumerate(states)}
     dim = len(states)
-    hd = np.zeros(dim, dtype=complex)
+    sz = np.array(states, dtype=np.int64)
+    hd = np.full(dim, const, dtype=complex)
+    for p in range(n):
+        hd += o[p, p] * ((sz >> (n - 1 - p)) & 1)
     rows_l, cols_l, vals_l = [], [], []
 
-    def emit(zt, z, v):
-        rows_l.append(idx[zt])
-        cols_l.append(idx[z])
-        vals_l.append(v)
-
-    # --- diagonal: const + one-body diagonal o[p,p] ---
-    for zi, z in enumerate(states):
-        d = const + sum(o[p, p] for p in range(n) if (z >> (n - 1 - p)) & 1)
-        hd[zi] = d
+    def emit(zs, zts, phs):
+        zs = np.asarray(zs, dtype=np.int64)
+        zts = np.asarray(zts, dtype=np.int64)
+        rows_l.append(np.fromiter((idx[z] for z in zts), dtype=np.int64,
+                                  count=len(zts)))
+        cols_l.append(np.fromiter((idx[z] for z in zs), dtype=np.int64,
+                                  count=len(zs)))
+        vals_l.append(phs)
 
     # --- one-body off-diagonal: o[p,q] a+_p a_q, q occupied, p empty.
+    # (the combination index array is shared by all terms — rest has
+    # the same length n-2 for every (p,q))
+    combs1 = np.array(list(combinations(range(n - 2), N - 1)),
+                      dtype=np.int64)
     for p in range(n):
         for q in range(n):
             if p == q or abs(o[p, q]) <= eps:
                 continue
-            rest = [r for r in range(n) if r not in (p, q)]
-            bitq = _bit(q, n)
-            bitp = _bit(p, n)
-            for oc in combinations(range(n - 2), N - 1):
-                z = bitq
-                for i in oc:
-                    z |= _bit(rest[i], n)
-                s = exterior_sign(z, q, n)
-                z1 = z ^ bitq
-                s *= exterior_sign(z1, p, n)
-                emit(z1 ^ bitp, z, o[p, q] * s)
+            rest = np.array([r for r in range(n) if r not in (p, q)],
+                            dtype=np.int64)
+            z = np.full(combs1.shape[0], _bit(q, n), dtype=np.int64)
+            for i in range(N - 1):
+                z |= 1 << (n - 1 - rest[combs1[:, i]])
+            z1 = z ^ _bit(q, n)
+            zt = z1 ^ _bit(p, n)
+            sgn = _sign_array(z, q, n) * _sign_array(z1, p, n)
+            emit(z, zt, o[p, q] * sgn)
 
-    # --- two-body: p<q, r<s, overlap allowed ({p,q} ∩ {r,s} may be
-    # non-empty — an orbital annihilated then re-created); the full
-    # sum reduces to 2 sum (t[p,q,r,s] - t[p,q,s,r]) a+_p a+_q a_r a_s.
+    # --- two-body: p<q, r<s, overlap allowed; the full sum reduces
+    # to 2 sum (t[p,q,r,s] - t[p,q,s,r]) a+_p a+_q a_r a_s.  The
+    # combination index array is shared by all non-overlap terms
+    # (rest length n-4); overlap terms generate theirs individually.
+    combs2 = np.array(list(combinations(range(n - 4), N - 2)),
+                      dtype=np.int64)
     for p in range(n):
         for q in range(p + 1, n):
             for r in range(n):
@@ -99,26 +130,33 @@ def exterior_hamiltonian(n, N, o, t, const, eps=0.0):
                     if abs(c2) <= eps:
                         continue
                     rest = [u for u in range(n) if u not in (p, q, r, s)]
-                    bitr = _bit(r, n)
-                    bits = _bit(s, n)
-                    bitq = _bit(q, n)
-                    bitp = _bit(p, n)
-                    for oc in combinations(range(len(rest)), N - 2):
-                        z = bitr | bits
-                        for i in oc:
-                            z |= _bit(rest[i], n)
-                        sgn = exterior_sign(z, s, n)
-                        z1 = z ^ bits
-                        sgn *= exterior_sign(z1, r, n)
-                        z2 = z1 ^ bitr
-                        sgn *= exterior_sign(z2, q, n)
-                        z3 = z2 ^ bitq
-                        sgn *= exterior_sign(z3, p, n)
-                        emit(z3 ^ bitp, z, c2 * sgn)
+                    if len(rest) < N - 2:
+                        continue
+                    if len(rest) == n - 4:
+                        combs = combs2
+                    else:
+                        combs = np.array(list(combinations(
+                            range(len(rest)), N - 2)), dtype=np.int64)
+                    if combs.size == 0:
+                        continue
+                    rest_a = np.array(rest, dtype=np.int64)
+                    z = np.full(combs.shape[0],
+                                _bit(r, n) | _bit(s, n), dtype=np.int64)
+                    for i in range(N - 2):
+                        z |= 1 << (n - 1 - rest_a[combs[:, i]])
+                    sgn = _sign_array(z, s, n)
+                    z1 = z ^ _bit(s, n)
+                    sgn *= _sign_array(z1, r, n)
+                    z2 = z1 ^ _bit(r, n)
+                    sgn *= _sign_array(z2, q, n)
+                    z3 = z2 ^ _bit(q, n)
+                    sgn *= _sign_array(z3, p, n)
+                    zt = z3 ^ _bit(p, n)
+                    emit(z, zt, c2 * sgn)
 
-    rows = np.array(rows_l, dtype=np.int64)
-    cols = np.array(cols_l, dtype=np.int64)
-    vals = np.array(vals_l, dtype=complex)
+    rows = np.concatenate(rows_l)
+    cols = np.concatenate(cols_l)
+    vals = np.concatenate(vals_l)
     H_off = sparse.coo_matrix((vals, (rows, cols)),
                               shape=(dim, dim)).tocsr()
     return hd, H_off
