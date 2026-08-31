@@ -60,16 +60,8 @@ def run(system='n2_631g_11', R=1.1):
     print('  cached _no_cache.npz', flush=True)
 
     # --- wavepacket + RS-1 analysis in NO basis ---
-    o_s = np.zeros((2 * n_act, 2 * n_act))
-    o_s[0::2, 0::2] = h1e_NO
-    o_s[1::2, 1::2] = h1e_NO
-    t_s = np.zeros((2 * n_act,) * 4)
-    for p in range(n_act):
-        for q in range(n_act):
-            for r in range(n_act):
-                for s in range(n_act):
-                    for (s1, s2, s3, s4) in ((0, 0, 0, 0), (1, 1, 1, 1), (0, 1, 0, 1), (1, 0, 1, 0)):
-                        t_s[2*p+s1, 2*q+s2, 2*r+s3, 2*s+s4] = eri_NO[p, q, r, s]
+    from geoqc.integrals import spin_orbital_integrals
+    o_s, t_s = spin_orbital_integrals(h1e_NO, eri_NO)
     nuc = mol.energy_nuc()
     strs = np.asarray(cistring.gen_strings4orblist(range(n_act), na), dtype=np.int64)
     C = c2.reshape(len(strs), len(strs))

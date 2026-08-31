@@ -28,21 +28,19 @@ from geoqc import exterior
 
 
 def spin_integrals(mol, mf, fc=0):
+    """Spatial -> spin-orbital integrals via the LIBRARY converter
+    (geoqc.integrals.spin_orbital_integrals — openfermion layout,
+    element-wise verified; the hand-rolled abab-mode loop previously
+    here produced a wrong spin layout and silently broke H_off).
+    Returns (n_act, o_s, t_s, nuc, h1e, eri) with h1e/eri the spatial
+    integrals in chemist notation (for pyscf FCI)."""
+    from geoqc.integrals import spin_orbital_integrals
     n_orb = mol.nao_nr()
     n_act = n_orb - fc
     h1e = mf.mo_coeff[:, fc:].T @ mf.get_hcore() @ mf.mo_coeff[:, fc:]
     eri = ao2mo.kernel(mol, mf.mo_coeff[:, fc:], compact=False).reshape(n_act, n_act, n_act, n_act)
-    o_s = np.zeros((2 * n_act, 2 * n_act))
-    o_s[0::2, 0::2] = h1e
-    o_s[1::2, 1::2] = h1e
-    t_s = np.zeros((2 * n_act,) * 4)
-    for p in range(n_act):
-        for q in range(n_act):
-            for r in range(n_act):
-                for s in range(n_act):
-                    for (s1, s2, s3, s4) in ((0, 0, 0, 0), (1, 1, 1, 1), (0, 1, 0, 1), (1, 0, 1, 0)):
-                        t_s[2*p+s1, 2*q+s2, 2*r+s3, 2*s+s4] = eri[p, q, r, s]
-    return n_act, o_s, t_s, float(mol.energy_nuc())
+    o_s, t_s = spin_orbital_integrals(h1e, eri)
+    return n_act, o_s, t_s, float(mol.energy_nuc()), h1e, eri
 
 
 def map_to_sector(C, strs, n_a, n_b, rt_a, rt_b, db):
@@ -66,12 +64,10 @@ def analyze(system):
     else:
         raise ValueError(system)
     mf = scf.RHF(mol).run()
-    n_act, o_s, t_s, nuc = spin_integrals(mol, mf, fc)
+    n_act, o_s, t_s, nuc, h1e, eri = spin_integrals(mol, mf, fc)
     na = nb = nelec // 2
-    # FCI (memory-safe: direct_spin1, small Davidson space)
-    h1e = o_s[0::2, 0::2]
-    eri = np.zeros((n_act,) * 4)
-    eri[:, :, :, :] = t_s[0::2, 0::2, 0::2, 0::2]
+    # FCI (memory-safe: direct_spin1, small Davidson space); use the
+    # spatial integrals directly (t_s is the library spin layout)
     cis = direct_spin1.FCISolver(mol)
     cis.verbose = 0
     cis.max_space = 4
@@ -84,18 +80,18 @@ def analyze(system):
     hd, *_ = exterior.sector_diagonal_sz(2 * n_act, nelec, 0, o_s, t_s, nuc, 1e-6, two_body=True)
     rt_a = np.full(1 << n_orb2, -1, dtype=np.int64)
     rt_b = np.full(1 << n_orb2, -1, dtype=np.int64)
-    for i, cc in enumerate(combinations(range(n_orb2), n_a)):
+    for i, cc in enumerate(combinations(range(n_orb2), na)):
         rt_a[sum(1 << j for j in cc)] = i
-    for i, cc in enumerate(combinations(range(n_orb2), n_b)):
+    for i, cc in enumerate(combinations(range(n_orb2), nb)):
         rt_b[sum(1 << j for j in cc)] = i
     az_of = np.full(da, -1, dtype=np.int64)
     bz_of = np.full(db, -1, dtype=np.int64)
-    for i, cc in enumerate(combinations(range(n_orb2), n_a)):
+    for i, cc in enumerate(combinations(range(n_orb2), na)):
         az_of[i] = sum(1 << j for j in cc)
-    for i, cc in enumerate(combinations(range(n_orb2), n_b)):
+    for i, cc in enumerate(combinations(range(n_orb2), nb)):
         bz_of[i] = sum(1 << j for j in cc)
 
-    c_map = map_to_sector(C, strs, n_a, n_b, rt_a, rt_b, db)
+    c_map = map_to_sector(C, strs, na, nb, rt_a, rt_b, db)
     hf = (1 << na) - 1
     ra_hf = rt_a[hf]
     hd_hf = hd[ra_hf * db + ra_hf]
@@ -124,6 +120,18 @@ def analyze(system):
     print(f'  A thermal kernel corr(log|c|^2, dE)   = {corrA:+.4f}  [expected ~0 -> refuted]')
     print(f'  B RS-1 spectrum corr(|c|,|H|/dE)      = {corrB:+.4f}  [expected ~0.97 -> confirmed]')
     print(f'    log-log slope = {slopeB:.3f}  [expected ~1.0]')
+    # per excitation-order k (relative to HF): RS-1 corr within each k
+    def order(az, bz):
+        return (bin(int(az) ^ hf).count('1') + bin(int(bz) ^ hf).count('1')) // 2
+    idx_cpl = cpl.nonzero()[0]
+    ks = sorted({order(az_of[idx_cpl[j] // db], bz_of[idx_cpl[j] % db])
+                 for j in range(len(idx_cpl))})
+    for k in ks:
+        sel = np.array([order(az_of[idx_cpl[j] // db], bz_of[idx_cpl[j] % db]) == k
+                        for j in range(len(idx_cpl))])
+        if sel.sum() > 3:
+            ck = np.corrcoef(obs[sel], pred[sel])[0, 1]
+            print(f'    k={k}: corr={ck:+.4f}  n={sel.sum()}')
 
 
 if __name__ == '__main__':
