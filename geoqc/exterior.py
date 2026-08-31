@@ -23,6 +23,17 @@ provides:
 Machine-verified: the exterior sector matrix equals the JW-Pauli
 sector matrix to machine precision (nnz identical, |diff| <= 2e-14);
 the matrix-free matvec equals the sparse matvec (<= 5e-14).
+
+INTEGRAL CONVENTION (do not guess, do not hand-roll):
+the two-body tensor t is the openfermion layout produced ONLY by
+geoqc.integrals.spin_orbital_integrals: t_s[p,q,r,s] = (1/2)(p s|q r)
+with spin matching sigma_p = sigma_s AND sigma_q = sigma_r (modes
+aaaa/bbbb/abba/baab).  A hand-written loop filling t[p,q,r,s] =
+(p q | r s) in the abab mode is WRONG — it silently breaks every
+energy (LiH 6-31G E0 -19.25 vs true -7.9984, 11 Ha off) while all
+internal cross-checks (JW-Pauli, sparse H, this apply) still agree
+to machine precision because they share the same wrong tensor.
+Only an absolute comparison against pyscf FCI catches it.
 """
 
 import numpy as np

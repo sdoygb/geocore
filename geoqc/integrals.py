@@ -41,7 +41,19 @@ def spin_orbital_integrals(o, t):
     openfermion and verified via InteractionOperator -> FCI):
     t_s[p,q,r,s] = (1/2) (a_p a_s | a_q a_r)  [chemist notation],
     with the SPIN MATCHING sigma_p = sigma_s AND sigma_q = sigma_r,
-    and the 1/2 of H2 folded inside the tensor.  Vectorised."""
+    and the 1/2 of H2 folded inside the tensor.  Vectorised.
+
+    *** THIS IS THE ONLY CORRECT ENTRY POINT — DO NOT HAND-ROLL ***
+    A hand-written loop that fills t_s[p,q,r,s] = (p q | r s) with
+    the same-spin modes (0,0,0,0)/(1,1,1,1)/(0,1,0,1)/(1,0,1,0)
+    silently produces a WRONG spin layout (it needs abba/baab, the
+    1/2, and the adbc->abcd rearrangement).  Every energy computed
+    from such a tensor is wrong: LiH 6-31G E0 came out -19.25 Ha
+    instead of -7.9984 (11 Ha off); the error is silent because all
+    internal cross-checks (JW-Pauli, sparse, apply) share the same
+    wrong tensor and still agree to machine precision.  Only an
+    absolute comparison against pyscf FCI catches it.  Verified:
+    LiH 6-31G exact E0 = -7.9983583335 == pyscf FCI (5.6e-8)."""
     n = o.shape[0]
     ns = 2 * n
     o_s = np.zeros((ns, ns), dtype=complex)
