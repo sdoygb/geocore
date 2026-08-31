@@ -62,6 +62,9 @@ def power_iter(apply, hd2, az_of, bz_of, rt_a, rt_b, db, dim, k, iters, seed_idx
 def main():
     args = sys.argv[1:]
     npz = args[0]; nelec = int(args[1])
+    nprocs = 0  # 0 = 串行
+    if '--parallel' in args:
+        nprocs = int(args[args.index('--parallel') + 1])
     ks = []
     if '--k' in args:
         i = args.index('--k')
@@ -75,7 +78,15 @@ def main():
     n, o_s, t_s, nuc = load(npz)
     n_a = n_b = nelec // 2
     ns = 2 * n
-    apply, n_a2, n_b2, n_orb, da, db = exterior.sparse_action_sz(ns, nelec, 0, o_s, t_s, nuc, 1e-4)
+    _pclose = None
+    if nprocs > 0:
+        apply, _pclose, n_a2, n_b2, n_orb, da, db = \
+            exterior.parallel_apply_factory(ns, nelec, 0, o_s, t_s, nuc,
+                                            1e-4, nprocs=nprocs)
+        print(f'  并行 apply: {nprocs} 进程')
+    else:
+        apply, n_a2, n_b2, n_orb, da, db = exterior.sparse_action_sz(
+            ns, nelec, 0, o_s, t_s, nuc, 1e-4)
     assert (n_a2, n_b2) == (n_a, n_b)
     dim = da * db
     rt_a, rt_b, az_of, bz_of = build_rank_tables(n_orb, n_a, n_b, da, db)
@@ -115,6 +126,8 @@ def main():
         kmax = max(ks)
         for k in sorted(ks)[:-1]:
             print(f'  delta E({k}) - E({kmax}) = {results[k]-results[kmax]:+.2e}')
+    if _pclose is not None:
+        _pclose()
     print('DONE')
 
 if __name__ == '__main__':
