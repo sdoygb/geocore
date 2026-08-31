@@ -731,14 +731,66 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
         azs = np.asarray(azs, dtype=np.int64)
         bzs = np.asarray(bzs, dtype=np.int64)
         vals = np.asarray(vals, dtype=complex)
-        t_az = []
-        t_bz = []
-        t_v = []
-        full_a = (1 << n_orb) - 1
-        for i in range(len(azs)):
+        nstates = len(azs)
+        if nstates == 0:
+            return (np.zeros(0, dtype=np.int64),
+                    np.zeros(0, dtype=np.int64),
+                    np.zeros(0, dtype=complex))
+        # Two-pass: first count targets per state, then allocate exactly.
+        # This eliminates the GB-scale virtual-memory footprint of the old
+        # Python-list version (a 2000-state apply touched ~2.4M objects
+        # ~ 250 GB virtual) and of any loose upper-bound preallocation.
+        counts = np.zeros(nstates, dtype=np.int64)
+        for i in range(nstates):
+            az = int(azs[i]); bz = int(bzs[i])
+            cnt = 0
+            occ_a = [k for k in range(n_orb) if (az >> k) & 1]
+            virt_a = [k for k in range(n_orb) if not (az >> k) & 1]
+            for a in occ_a:
+                for v in virt_a:
+                    if abs(o[2 * a, 2 * v]) > eps:
+                        cnt += 1
+            occ_b = [k for k in range(n_orb) if (bz >> k) & 1]
+            virt_b = [k for k in range(n_orb) if not (bz >> k) & 1]
+            for b in occ_b:
+                for v in virt_b:
+                    if abs(o[2 * b + 1, 2 * v + 1]) > eps:
+                        cnt += 1
+            r_occ = np.where(SR == 0, (az >> KR) & 1, (bz >> KR) & 1)
+            s_occ = np.where(SS == 0, (az >> KS) & 1, (bz >> KS) & 1)
+            ok = (r_occ == 1) & (s_occ == 1)
+            if ok.any():
+                idx0 = np.nonzero(ok)[0]
+                SQk = SQ[idx0]; KQk = KQ[idx0]
+                SPk0 = SP[idx0]; KPk0 = KP[idx0]
+                az1 = az ^ np.where(SS[idx0] == 0, np.int64(1) << KS[idx0], np.int64(0))
+                bz1 = bz ^ np.where(SS[idx0] == 1, np.int64(1) << KS[idx0], np.int64(0))
+                az1 = az1 ^ np.where(SR[idx0] == 0, np.int64(1) << KR[idx0], np.int64(0))
+                bz1 = bz1 ^ np.where(SR[idx0] == 1, np.int64(1) << KR[idx0], np.int64(0))
+                q_empty = np.where(SQk == 0, ((az1 >> KQk) & 1) == 0,
+                                   ((bz1 >> KQk) & 1) == 0)
+                g = np.nonzero(q_empty)[0]
+                if len(g) > 0:
+                    aq = az1[g]; bq = bz1[g]
+                    kqg = KQk[g]; sqb = SQk[g]
+                    aq = aq ^ np.where(sqb == 0, np.int64(1) << kqg, np.int64(0))
+                    bq = bq ^ np.where(sqb == 1, np.int64(1) << kqg, np.int64(0))
+                    p_empty = np.where(SPk0[g] == 0, ((aq >> KPk0[g]) & 1) == 0,
+                                       ((bq >> KPk0[g]) & 1) == 0)
+                    cnt += int(p_empty.sum())
+            counts[i] = cnt
+        total = int(counts.sum())
+        if total == 0:
+            return (np.zeros(0, dtype=np.int64),
+                    np.zeros(0, dtype=np.int64),
+                    np.zeros(0, dtype=complex))
+        t_az = np.empty(total, dtype=np.int64)
+        t_bz = np.empty(total, dtype=np.int64)
+        t_v = np.empty(total, dtype=complex)
+        cursor = 0
+        for i in range(nstates):
             az = int(azs[i]); bz = int(bzs[i]); val = vals[i]
             # ---- single excitations ----
-            # alpha: occupy a -> virtual v
             occ_a = [k for k in range(n_orb) if (az >> k) & 1]
             virt_a = [k for k in range(n_orb) if not (az >> k) & 1]
             for a in occ_a:
@@ -748,8 +800,9 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                     az2 = az ^ (1 << a) ^ (1 << v)
                     sgn = _spin_sign(az, bz, a, False) * \
                         _spin_sign(az2, bz, v, False)
-                    t_az.append(az2); t_bz.append(bz)
-                    t_v.append(o[2 * v, 2 * a] * sgn * val)
+                    t_az[cursor] = az2; t_bz[cursor] = bz
+                    t_v[cursor] = o[2 * v, 2 * a] * sgn * val
+                    cursor += 1
             occ_b = [k for k in range(n_orb) if (bz >> k) & 1]
             virt_b = [k for k in range(n_orb) if not (bz >> k) & 1]
             for b in occ_b:
@@ -759,8 +812,9 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                     bz2 = bz ^ (1 << b) ^ (1 << v)
                     sgn = _spin_sign(az, bz, b, True) * \
                         _spin_sign(az, bz2, v, True)
-                    t_az.append(az); t_bz.append(bz2)
-                    t_v.append(o[2 * v + 1, 2 * b + 1] * sgn * val)
+                    t_az[cursor] = az; t_bz[cursor] = bz2
+                    t_v[cursor] = o[2 * v + 1, 2 * b + 1] * sgn * val
+                    cursor += 1
             # ---- double excitations: vectorised term-array traversal ----
             r_occ = np.where(SR == 0, (az >> KR) & 1, (bz >> KR) & 1)
             s_occ = np.where(SS == 0, (az >> KS) & 1, (bz >> KS) & 1)
@@ -772,7 +826,6 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                 SPk, SQk, SRk, SSk = SP[idx], SQ[idx], SR[idx], SS[idx]
                 KPk, KQk, KRk, KSk = KP[idx], KQ[idx], KR[idx], KS[idx]
                 one = np.int64(1)
-                # annihilate s, then r (signs on the current state)
                 rm_sa = np.where(SSk == 0, one << KSk, np.int64(0))
                 rm_sb = np.where(SSk == 1, one << KSk, np.int64(0))
                 sgn = _spin_sign(az, bz, KSk, SSk.astype(bool))
@@ -783,10 +836,8 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                 sgn = sgn * _spin_sign(az1, bz1, KRk, SRk.astype(bool))
                 az1 = az1 ^ rm_ra
                 bz1 = bz1 ^ rm_rb
-                # q wedge (must be empty in az1/bz1)
                 q_empty = np.where(SQk == 0, ((az1 >> KQk) & 1) == 0,
                                    ((bz1 >> KQk) & 1) == 0)
-                okq = ok[idx][q_empty]
                 good = np.nonzero(q_empty)[0]
                 if len(good) > 0:
                     g = good
@@ -798,7 +849,6 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                     sq = sq * _spin_sign(aq, bq, kqg, sqb.astype(bool))
                     aq = aq ^ rm_qa
                     bq = bq ^ rm_qb
-                    # p wedge (must be empty)
                     p_empty = np.where(SPk[g] == 0, ((aq >> KPk[g]) & 1) == 0,
                                        ((bq >> KPk[g]) & 1) == 0)
                     good2 = np.nonzero(p_empty)[0]
@@ -812,15 +862,13 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                         sp = sp * _spin_sign(ap, bp, kpg, spb.astype(bool))
                         ap = ap ^ rm_pa
                         bp = bp ^ rm_pb
-                        t_az.extend(ap.tolist())
-                        t_bz.extend(bp.tolist())
-                        t_v.extend((Ck[h] * sp * val).tolist())
+                        m = len(ap)
+                        t_az[cursor:cursor + m] = ap
+                        t_bz[cursor:cursor + m] = bp
+                        t_v[cursor:cursor + m] = Ck[h] * sp * val
+                        cursor += m
 
-        if not t_az:
-            return (np.zeros(0, dtype=np.int64),
-                    np.zeros(0, dtype=np.int64),
-                    np.zeros(0, dtype=complex))
-        return (np.array(t_az), np.array(t_bz), np.array(t_v))
+        return (t_az, t_bz, t_v)
 
     return apply, n_a, n_b, n_orb, dim_a, dim_b
 
