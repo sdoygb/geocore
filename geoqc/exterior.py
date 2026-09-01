@@ -912,12 +912,15 @@ _WORKER_CFG = None
 
 
 def _worker_init(cfg):
-    """Per-worker initialiser: build the local sparse_action_sz once.
-    cfg = (n, N, sz, o, t, const, eps).  Top-level (spawn-safe)."""
+    """Per-worker initialiser: build the local apply once.
+    cfg = (n, N, sz, o, t, const, eps, vec).  Top-level (spawn-safe)."""
     global _WORKER_APPLY, _WORKER_CFG
     _WORKER_CFG = cfg
-    n, N, sz, o, t, const, eps = cfg
-    _WORKER_APPLY = sparse_action_sz(n, N, sz, o, t, const, eps)[0]
+    n, N, sz, o, t, const, eps, vec = cfg
+    if vec:
+        _WORKER_APPLY = sparse_action_sz_vec(n, N, sz, o, t, const, eps)[0]
+    else:
+        _WORKER_APPLY = sparse_action_sz(n, N, sz, o, t, const, eps)[0]
 
 
 def _worker_chunk(args):
@@ -926,7 +929,8 @@ def _worker_chunk(args):
     return _WORKER_APPLY(az, bz, v)
 
 
-def parallel_apply_factory(n, N, sz, o, t, const, eps=0.0, nprocs=None):
+def parallel_apply_factory(n, N, sz, o, t, const, eps=0.0, nprocs=None,
+                           vec=False):
     """Return a parallel apply(azs, bzs, vals) that fans the state batch
     across a process pool (GIL-free).  Returns
     (papply, pclose, n_a, n_b, n_orb, dim_a, dim_b); call pclose() when
@@ -934,7 +938,9 @@ def parallel_apply_factory(n, N, sz, o, t, const, eps=0.0, nprocs=None):
     and reused (crucial: the top-k power iteration makes hundreds of
     sequential apply calls — per-call pool creation would dominate).
     Machine-verified: parallel COO == serial COO to 7.1e-15; ~2.3x on
-    3000 states (pool-reuse gives ~4.7x on larger batches)."""
+    3000 states (pool-reuse gives ~4.7x on larger batches).
+    With vec=True each worker uses the vectorised apply
+    (sparse_action_sz_vec) — the two speedups multiply."""
     from multiprocessing import Pool
     from math import comb
     n_a = (N + 2 * sz) // 2
@@ -944,7 +950,7 @@ def parallel_apply_factory(n, N, sz, o, t, const, eps=0.0, nprocs=None):
     dim_b = comb(n_orb, n_b)
     if nprocs is None:
         nprocs = min(6, __import__('multiprocessing').cpu_count())
-    cfg = (n, N, sz, o, t, const, eps)
+    cfg = (n, N, sz, o, t, const, eps, vec)
     _pool = [None]  # lazy pool holder
 
     def get_pool():

@@ -83,8 +83,9 @@ def main():
     if nprocs > 0:
         apply, _pclose, n_a2, n_b2, n_orb, da, db = \
             exterior.parallel_apply_factory(ns, nelec, 0, o_s, t_s, nuc,
-                                            1e-4, nprocs=nprocs)
-        print(f'  并行 apply: {nprocs} 进程')
+                                            1e-4, nprocs=nprocs,
+                                            vec=use_vec)
+        print(f'  并行 apply: {nprocs} 进程{" + 向量化" if use_vec else ""}')
     elif use_vec:
         apply, n_a2, n_b2, n_orb, da, db = exterior.sparse_action_sz_vec(
             ns, nelec, 0, o_s, t_s, nuc, 1e-4)
