@@ -1027,6 +1027,7 @@ def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0):
     R = np.array([x[2] for x in tt], dtype=np.int64)
     S = np.array([x[3] for x in tt], dtype=np.int64)
     C = np.array([x[4] for x in tt], dtype=complex)
+    T = len(P)
     KP = P // 2
     KQ = Q // 2
     SP = P % 2
@@ -1066,16 +1067,25 @@ def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0):
         bz2 = bzs[:, None, None] ^ (1 << Ob) ^ (1 << Vb)
         sgnB = _spin_sign(azs[:, None, None], bzs[:, None, None], Ob, True) * \
                _spin_sign(azs[:, None, None], bz2, Vb, True)
-        # ---- doubles: full-grid fancy-index mask ----
-        r_occ = np.where(SR[None, :] == 0, occA[:, KR], occB[:, KR])
-        s_occ = np.where(SS[None, :] == 0, occA[:, KS], occB[:, KS])
-        ok = r_occ & s_occ
-        si, ti = np.nonzero(ok)
-        if len(si) == 0:
-            d_az = np.zeros(0, dtype=np.int64)
-            d_bz = np.zeros(0, dtype=np.int64)
-            d_v = np.zeros(0, dtype=complex)
-        else:
+        # ---- doubles: chunked fancy-index mask ----
+        # full-grid (S, T) masks would need S*T*3 bytes; chunk so the
+        # per-block peak stays ~50 MB even for large T (H2O cc-pVDZ has
+        # 126,236 terms; S=5000 -> 1.9 GB un-chunked — the memory blowup
+        # reported when running it).  Adaptive chunk: target
+        # chunk*T <= 5e7.
+        CH = chunk if chunk > 0 else max(1, min(S, 50_000_000 // max(T, 1)))
+        d_az_l = []; d_bz_l = []; d_v_l = []
+        for c0 in range(0, S, CH):
+            c1 = min(c0 + CH, S)
+            r_occ = np.where(SR[None, :] == 0, occA[c0:c1][:, KR],
+                             occB[c0:c1][:, KR])
+            s_occ = np.where(SS[None, :] == 0, occA[c0:c1][:, KS],
+                             occB[c0:c1][:, KS])
+            ok = r_occ & s_occ
+            si_c, ti = np.nonzero(ok)
+            if len(si_c) == 0:
+                continue
+            si = si_c + c0
             az_c = azs[si]; bz_c = bzs[si]
             KS_c = KS[ti]; SS_c = SS[ti]; KR_c = KR[ti]; SR_c = SR[ti]
             KQ_c = KQ[ti]; SQ_c = SQ[ti]; KP_c = KP[ti]; SP_c = SP[ti]
@@ -1092,28 +1102,31 @@ def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0):
                                ((bz1 >> KQ_c) & 1) == 0)
             g = np.nonzero(q_empty)[0]
             if len(g) == 0:
-                d_az = np.zeros(0, dtype=np.int64)
-                d_bz = np.zeros(0, dtype=np.int64)
-                d_v = np.zeros(0, dtype=complex)
-            else:
-                rm_qa = np.where(SQ_c[g] == 0, one << KQ_c[g], np.int64(0))
-                rm_qb = np.where(SQ_c[g] == 1, one << KQ_c[g], np.int64(0))
-                aq = az1[g] ^ rm_qa; bq = bz1[g] ^ rm_qb
-                sgn = sgn[g] * _spin_sign(aq, bq, KQ_c[g], SQ_c[g].astype(bool))
-                p_empty = np.where(SP_c[g] == 0, ((aq >> KP_c[g]) & 1) == 0,
-                                   ((bq >> KP_c[g]) & 1) == 0)
-                h = np.nonzero(p_empty)[0]
-                if len(h) == 0:
-                    d_az = np.zeros(0, dtype=np.int64)
-                    d_bz = np.zeros(0, dtype=np.int64)
-                    d_v = np.zeros(0, dtype=complex)
-                else:
-                    rm_pa = np.where(SP_c[g[h]] == 0, one << KP_c[g[h]], np.int64(0))
-                    rm_pb = np.where(SP_c[g[h]] == 1, one << KP_c[g[h]], np.int64(0))
-                    ap = aq[h] ^ rm_pa; bp = bq[h] ^ rm_pb
-                    sgn = sgn[h] * _spin_sign(ap, bp, KP_c[g[h]], SP_c[g[h]].astype(bool))
-                    d_az = ap; d_bz = bp
-                    d_v = C_c[g[h]] * sgn * vals[si[g[h]]]
+                continue
+            rm_qa = np.where(SQ_c[g] == 0, one << KQ_c[g], np.int64(0))
+            rm_qb = np.where(SQ_c[g] == 1, one << KQ_c[g], np.int64(0))
+            aq = az1[g] ^ rm_qa; bq = bz1[g] ^ rm_qb
+            sgn = sgn[g] * _spin_sign(aq, bq, KQ_c[g], SQ_c[g].astype(bool))
+            p_empty = np.where(SP_c[g] == 0, ((aq >> KP_c[g]) & 1) == 0,
+                               ((bq >> KP_c[g]) & 1) == 0)
+            h = np.nonzero(p_empty)[0]
+            if len(h) == 0:
+                continue
+            rm_pa = np.where(SP_c[g[h]] == 0, one << KP_c[g[h]], np.int64(0))
+            rm_pb = np.where(SP_c[g[h]] == 1, one << KP_c[g[h]], np.int64(0))
+            ap = aq[h] ^ rm_pa; bp = bq[h] ^ rm_pb
+            sgn = sgn[h] * _spin_sign(ap, bp, KP_c[g[h]], SP_c[g[h]].astype(bool))
+            d_az_l.append(ap)
+            d_bz_l.append(bp)
+            d_v_l.append(C_c[g[h]] * sgn * vals[si[g[h]]])
+        if d_az_l:
+            d_az = np.concatenate(d_az_l)
+            d_bz = np.concatenate(d_bz_l)
+            d_v = np.concatenate(d_v_l)
+        else:
+            d_az = np.zeros(0, dtype=np.int64)
+            d_bz = np.zeros(0, dtype=np.int64)
+            d_v = np.zeros(0, dtype=complex)
         # ---- concatenate singles + doubles ----
         az_l = [az2[maskA],
                 np.broadcast_to(azs[:, None, None], bz2.shape)[maskB],
