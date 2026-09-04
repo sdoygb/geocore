@@ -851,7 +851,8 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
         if nstates == 0:
             return (np.zeros(0, dtype=np.int64),
                     np.zeros(0, dtype=np.int64),
-                    np.zeros(0, dtype=complex))
+                    np.zeros(0, dtype=complex),
+                    np.zeros(0, dtype=np.int64))
         # Two-pass: first count targets per state, then allocate exactly.
         # This eliminates the GB-scale virtual-memory footprint of the old
         # Python-list version (a 2000-state apply touched ~2.4M objects
@@ -896,10 +897,12 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
         if total == 0:
             return (np.zeros(0, dtype=np.int64),
                     np.zeros(0, dtype=np.int64),
-                    np.zeros(0, dtype=complex))
+                    np.zeros(0, dtype=complex),
+                    np.zeros(0, dtype=np.int64))
         t_az = np.empty(total, dtype=np.int64)
         t_bz = np.empty(total, dtype=np.int64)
         t_v = np.empty(total, dtype=complex)
+        t_src = np.empty(total, dtype=np.int64)
         cursor = 0
         for i in range(nstates):
             az = int(azs[i]); bz = int(bzs[i]); val = vals[i]
@@ -917,6 +920,7 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                     t_az[cursor:cursor + _m] = _az2
                     t_bz[cursor:cursor + _m] = bz
                     t_v[cursor:cursor + _m] = _cv * _sgn * val
+                    t_src[cursor:cursor + _m] = i
                     cursor += _m
             if N_SE_B > 0:
                 _b_occ = ((bz >> SE_B_B) & 1) == 1
@@ -931,6 +935,7 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                     t_az[cursor:cursor + _m] = az
                     t_bz[cursor:cursor + _m] = _bz2
                     t_v[cursor:cursor + _m] = _cv * _sgn * val
+                    t_src[cursor:cursor + _m] = i
                     cursor += _m
             # ---- double excitations: vectorised term-array traversal ----
             r_occ = np.where(SR == 0, (az >> KR) & 1, (bz >> KR) & 1)
@@ -983,9 +988,10 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
                         t_az[cursor:cursor + m] = ap
                         t_bz[cursor:cursor + m] = bp
                         t_v[cursor:cursor + m] = Ck[h] * sp * val
+                        t_src[cursor:cursor + m] = i
                         cursor += m
 
-        return (t_az, t_bz, t_v)
+        return (t_az, t_bz, t_v, t_src)
 
     return apply, n_a, n_b, n_orb, dim_a, dim_b
 

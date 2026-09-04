@@ -25,7 +25,9 @@ def run_pyscf_fci(mol, mo_coeff, h1e, eri, nelec, n_orb):
     t0 = time.time()
     e, c = cis.kernel(h1e, eri, n_orb, nelec)
     dt = time.time() - t0
-    return float(e), dt
+    # pyscf FCI kernel energy excludes nuclear repulsion; WCI exterior carries
+    # nuc=mol.energy_nuc(). Add E_nuc for an apples-to-apples total energy.
+    return float(e) + mol.energy_nuc(), dt
 
 def run_wci(mol, mo_coeff, h1e, eri, nelec, n_orb, max_wp=30, tol=1e-8):
     """Run WCI (library module) and return (energy, time, n_wp, dim_var)."""
