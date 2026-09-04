@@ -19,6 +19,11 @@ Every step of the pipeline speaks the geometry (article 10.86
   - integrals    : the physics input — SCF one/two-body integrals
                    (openfermion/pyscf interface, honestly labelled:
                    physics data, not geometry)
+  - wci          : Wavepacket Configuration Interaction — the
+                   geometrised FCI solver replacing top-k power
+                   iteration (article 10.88): cumulative Bruhat-
+                   connected variational space, Rayleigh-Ritz,
+                   residual-driven wavepacket selection
 
 Honest boundaries (the same ones carried through features 45-50):
   - the SCF integrals are physical input data, taken from the
@@ -30,6 +35,6 @@ Honest boundaries (the same ones carried through features 45-50):
     computation it replaces.
 """
 
-from . import sector, exterior, schubert, manifold, descent, integrals  # noqa: F401
+from . import sector, exterior, schubert, manifold, descent, integrals, wci, spectral  # noqa: F401
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

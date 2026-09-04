@@ -41,6 +41,14 @@ from itertools import combinations
 
 from .sector import sector_states  # noqa: F401
 
+# Optional Cython acceleration for the double-excitation loop.
+# If the compiled extension is unavailable, fall back to the numpy version.
+try:
+    from ._exterior_cy import double_excitation_cy as _double_excitation_cy
+    _HAS_CYTHON = True
+except ImportError:
+    _HAS_CYTHON = False
+
 __all__ = [
     "exterior_sign", "_bit", "exterior_hamiltonian",
     "exterior_terms", "exterior_action",
@@ -228,11 +236,14 @@ def exterior_hamiltonian_sz(n, N, sz, o, t, const, eps=0.0):
                     zt = z3 ^ (1 << (n - 1 - p))
                     emit(z, zt, c2 * sgn)
 
-    rows = np.concatenate(rows_l)
-    cols = np.concatenate(cols_l)
-    vals = np.concatenate(vals_l)
-    H_off = sparse.coo_matrix((vals, (rows, cols)),
-                              shape=(dim, dim)).tocsr()
+    if not rows_l:
+        H_off = sparse.csr_matrix((dim, dim), dtype=complex)
+    else:
+        rows = np.concatenate(rows_l)
+        cols = np.concatenate(cols_l)
+        vals = np.concatenate(vals_l)
+        H_off = sparse.coo_matrix((vals, (rows, cols)),
+                                  shape=(dim, dim)).tocsr()
     return hd, H_off
 
 
@@ -321,11 +332,14 @@ def exterior_hamiltonian(n, N, o, t, const, eps=0.0):
                     zt = z3 ^ _bit(p, n)
                     emit(z, zt, c2 * sgn)
 
-    rows = np.concatenate(rows_l)
-    cols = np.concatenate(cols_l)
-    vals = np.concatenate(vals_l)
-    H_off = sparse.coo_matrix((vals, (rows, cols)),
-                              shape=(dim, dim)).tocsr()
+    if not rows_l:
+        H_off = sparse.csr_matrix((dim, dim), dtype=complex)
+    else:
+        rows = np.concatenate(rows_l)
+        cols = np.concatenate(cols_l)
+        vals = np.concatenate(vals_l)
+        H_off = sparse.coo_matrix((vals, (rows, cols)),
+                                  shape=(dim, dim)).tocsr()
     return hd, H_off
 
 
@@ -525,6 +539,60 @@ def sector_diagonal_sz(n, N, sz, o, t, const, eps=0.0, two_body=True):
         M = 2.0 * (OA @ Jab @ OB.T)  # da x db
         hd = const + A2[:, None] + B2[None, :] + M
     return hd.ravel(), n_a, n_b, n_orb, dim_a, dim_b
+
+
+def sector_diagonal_at(n, N, sz, o, t, const, eps=0.0, idxs=None,
+                        lookup_tables=None):
+    """One-body diagonal H_ii at ARBITRARY state indices — the on-demand
+    twin of sector_diagonal_sz(two_body=False) for dim ~1e9 sectors
+    (H2O cc-pVDZ: dim 1.8e9; the full diagonal array would be 29 GB).
+    Computes H_ii = const + sum_k e_a[k] occ_a(k) + sum_k e_b[k] occ_b(k)
+    only for the requested idxs (O(n) per state, no full-dim array).
+    Pair with sparse_action_sz/vec (which carry the two-body diagonal
+    in row==col entries) exactly like sector_diagonal_sz(two_body=False).
+    idxs: array of C-order sector indices idx = ia*dim_b + ib, or None
+    for the full dim (falls back to sector_diagonal_sz semantics but
+    WITHOUT the O(dim) array — returns a generator-like callable
+    instead; simplest: pass explicit idxs).
+
+    lookup_tables : tuple (az_of, bz_of, dim_b) | None
+        Pre-built rank→bitstring lookup tables.  CRITICAL for performance:
+        without this, every call rebuilds C(n_orb,n_a) bitstrings via a
+        Python-level `sum(1<<j for j in c)` loop — at n_orb=38, n_a=8 that
+        is 48.9M Python big-int shifts per call (minutes + 782MB).  WCI
+        already builds these tables once in build_rank_tables; pass them
+        here to make hd_fn O(n_requested) instead of O(C(n_orb,n_a)).
+    """
+    from math import comb
+    n_a = (N + 2 * sz) // 2
+    n_b = N - n_a
+    n_orb = n // 2
+    dim_a = comb(n_orb, n_a)
+    dim_b = comb(n_orb, n_b)
+    e_a = np.array([o[2 * k, 2 * k].real for k in range(n_orb)])
+    e_b = np.array([o[2 * k + 1, 2 * k + 1].real for k in range(n_orb)])
+
+    if lookup_tables is not None:
+        # Reuse pre-built tables (fast path — no combinatorial rebuild)
+        az_of, bz_of, _db = lookup_tables
+    else:
+        # rank -> bitstring for alpha and beta (SLOW: rebuild every call)
+        from itertools import combinations
+        az_of = np.zeros(dim_a, dtype=np.int64)
+        bz_of = np.zeros(dim_b, dtype=np.int64)
+        for i, c in enumerate(combinations(range(n_orb), n_a)):
+            az_of[i] = sum(1 << j for j in c)
+        for i, c in enumerate(combinations(range(n_orb), n_b)):
+            bz_of[i] = sum(1 << j for j in c)
+
+    idxs = np.asarray(idxs, dtype=np.int64)
+    ia = idxs // dim_b
+    ib = idxs % dim_b
+    az = az_of[ia]
+    bz = bz_of[ib]
+    occ_a = ((az[:, None] >> np.arange(n_orb)[None, :]) & 1)
+    occ_b = ((bz[:, None] >> np.arange(n_orb)[None, :]) & 1)
+    return const + occ_a @ e_a + occ_b @ e_b
 
 
 def exterior_action_sz(n, N, sz, o, t, const, eps=0.0):
@@ -742,6 +810,35 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
     KR = R // 2
     KS = S // 2
     AM = (1 << n_orb) - 1
+
+    # ---- single-excitation term arrays (vectorised per-state) ----
+    # alpha: annihilate a (occ), create v (virt), a != v, integral nonzero
+    _se_a = []
+    for _a in range(n_orb):
+        for _v in range(n_orb):
+            if _a == _v:
+                continue
+            _c = o[2 * _v, 2 * _a]
+            if abs(_c) > eps:
+                _se_a.append((_a, _v, complex(_c)))
+    SE_A_A = np.array([x[0] for x in _se_a], dtype=np.int64)
+    SE_A_V = np.array([x[1] for x in _se_a], dtype=np.int64)
+    SE_A_C = np.array([x[2] for x in _se_a], dtype=complex)
+    N_SE_A = len(SE_A_A)
+    # beta: annihilate b (occ), create v (virt), b != v, integral nonzero
+    _se_b = []
+    for _b in range(n_orb):
+        for _v in range(n_orb):
+            if _b == _v:
+                continue
+            _c = o[2 * _v + 1, 2 * _b + 1]
+            if abs(_c) > eps:
+                _se_b.append((_b, _v, complex(_c)))
+    SE_B_B = np.array([x[0] for x in _se_b], dtype=np.int64)
+    SE_B_V = np.array([x[1] for x in _se_b], dtype=np.int64)
+    SE_B_C = np.array([x[2] for x in _se_b], dtype=complex)
+    N_SE_B = len(SE_B_B)
+
     # per-spin occupancy masks of a state
     def occ_masks(az, bz):
         return az, bz
@@ -763,18 +860,15 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
         for i in range(nstates):
             az = int(azs[i]); bz = int(bzs[i])
             cnt = 0
-            occ_a = [k for k in range(n_orb) if (az >> k) & 1]
-            virt_a = [k for k in range(n_orb) if not (az >> k) & 1]
-            for a in occ_a:
-                for v in virt_a:
-                    if abs(o[2 * a, 2 * v]) > eps:
-                        cnt += 1
-            occ_b = [k for k in range(n_orb) if (bz >> k) & 1]
-            virt_b = [k for k in range(n_orb) if not (bz >> k) & 1]
-            for b in occ_b:
-                for v in virt_b:
-                    if abs(o[2 * b + 1, 2 * v + 1]) > eps:
-                        cnt += 1
+            # ---- single excitations (vectorised term-array filter) ----
+            if N_SE_A > 0:
+                _a_occ = ((az >> SE_A_A) & 1) == 1
+                _v_virt = ((az >> SE_A_V) & 1) == 0
+                cnt += int((_a_occ & _v_virt).sum())
+            if N_SE_B > 0:
+                _b_occ = ((bz >> SE_B_B) & 1) == 1
+                _v_virt = ((bz >> SE_B_V) & 1) == 0
+                cnt += int((_b_occ & _v_virt).sum())
             r_occ = np.where(SR == 0, (az >> KR) & 1, (bz >> KR) & 1)
             s_occ = np.where(SS == 0, (az >> KS) & 1, (bz >> KS) & 1)
             ok = (r_occ == 1) & (s_occ == 1)
@@ -809,31 +903,35 @@ def sparse_action_sz(n, N, sz, o, t, const, eps=0.0):
         cursor = 0
         for i in range(nstates):
             az = int(azs[i]); bz = int(bzs[i]); val = vals[i]
-            # ---- single excitations ----
-            occ_a = [k for k in range(n_orb) if (az >> k) & 1]
-            virt_a = [k for k in range(n_orb) if not (az >> k) & 1]
-            for a in occ_a:
-                for v in virt_a:
-                    if abs(o[2 * a, 2 * v]) <= eps:
-                        continue
-                    az2 = az ^ (1 << a) ^ (1 << v)
-                    sgn = _spin_sign(az, bz, a, False) * \
-                        _spin_sign(az2, bz, v, False)
-                    t_az[cursor] = az2; t_bz[cursor] = bz
-                    t_v[cursor] = o[2 * v, 2 * a] * sgn * val
-                    cursor += 1
-            occ_b = [k for k in range(n_orb) if (bz >> k) & 1]
-            virt_b = [k for k in range(n_orb) if not (bz >> k) & 1]
-            for b in occ_b:
-                for v in virt_b:
-                    if abs(o[2 * b + 1, 2 * v + 1]) <= eps:
-                        continue
-                    bz2 = bz ^ (1 << b) ^ (1 << v)
-                    sgn = _spin_sign(az, bz, b, True) * \
-                        _spin_sign(az, bz2, v, True)
-                    t_az[cursor] = az; t_bz[cursor] = bz2
-                    t_v[cursor] = o[2 * v + 1, 2 * b + 1] * sgn * val
-                    cursor += 1
+            # ---- single excitations (vectorised term-array filter) ----
+            if N_SE_A > 0:
+                _a_occ = ((az >> SE_A_A) & 1) == 1
+                _v_virt = ((az >> SE_A_V) & 1) == 0
+                _valid = _a_occ & _v_virt
+                if _valid.any():
+                    _av = SE_A_A[_valid]; _vv = SE_A_V[_valid]; _cv = SE_A_C[_valid]
+                    _az2 = az ^ (np.int64(1) << _av) ^ (np.int64(1) << _vv)
+                    _sgn = _spin_sign(az, bz, _av, False) * \
+                           _spin_sign(_az2, bz, _vv, False)
+                    _m = int(_valid.sum())
+                    t_az[cursor:cursor + _m] = _az2
+                    t_bz[cursor:cursor + _m] = bz
+                    t_v[cursor:cursor + _m] = _cv * _sgn * val
+                    cursor += _m
+            if N_SE_B > 0:
+                _b_occ = ((bz >> SE_B_B) & 1) == 1
+                _v_virt = ((bz >> SE_B_V) & 1) == 0
+                _valid = _b_occ & _v_virt
+                if _valid.any():
+                    _bv = SE_B_B[_valid]; _vv = SE_B_V[_valid]; _cv = SE_B_C[_valid]
+                    _bz2 = bz ^ (np.int64(1) << _bv) ^ (np.int64(1) << _vv)
+                    _sgn = _spin_sign(az, bz, _bv, True) * \
+                           _spin_sign(az, _bz2, _vv, True)
+                    _m = int(_valid.sum())
+                    t_az[cursor:cursor + _m] = az
+                    t_bz[cursor:cursor + _m] = _bz2
+                    t_v[cursor:cursor + _m] = _cv * _sgn * val
+                    cursor += _m
             # ---- double excitations: vectorised term-array traversal ----
             r_occ = np.where(SR == 0, (az >> KR) & 1, (bz >> KR) & 1)
             s_occ = np.where(SS == 0, (az >> KS) & 1, (bz >> KS) & 1)
@@ -986,7 +1084,7 @@ def parallel_apply_factory(n, N, sz, o, t, const, eps=0.0, nprocs=None,
     return papply, pclose, n_a, n_b, n_orb, dim_a, dim_b
 
 
-def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0):
+def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0, gpu_apply=None):
     """Fully-vectorised sparse S_z action (apply) — the batched twin of
     sparse_action_sz, same interface and same machine-verified output
     (aggregated |diff| <= 4e-15 on N2 6-31G frozen core, dim 1.9e7).
@@ -1000,6 +1098,11 @@ def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0):
     The per-state Python loop over double-excitation terms is replaced
     by one flat-array chain over the compressed (source, term) pairs.
 
+    [文章标注] 10.88 §7.12 优化九：GPU 加速双激发 apply
+    - gpu_apply 参数：传入 geoqc.gpu.GPUApply 实例时，doubles 用 GPU 计算，
+      singles 仍用 CPU，合并后返回。H₂O/cc-pVDZ 端到端加速 2.2x。
+    - doubles_only 参数：只返回 doubles 部分（用于调试/验证）。
+
     Returns (apply, n_a, n_b, n_orb, dim_a, dim_b) with the same
     apply(azs, bzs, vals) -> (az_t, bz_t, out) COO contract as
     sparse_action_sz."""
@@ -1010,37 +1113,42 @@ def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0):
     dim_a = comb(n_orb, n_a)
     dim_b = comb(n_orb, n_b)
 
-    tt = []
-    for p in range(n):
-        for q in range(p + 1, n):
-            for r in range(n):
-                for s in range(r + 1, n):
-                    c2 = 2.0 * (t[p, q, r, s] - t[p, q, s, r])
-                    if abs(c2) <= eps:
-                        continue
-                    if (1 - p % 2) + (1 - q % 2) != \
-                       (1 - r % 2) + (1 - s % 2):
-                        continue
-                    tt.append((p, q, r, s, complex(c2)))
-    P = np.array([x[0] for x in tt], dtype=np.int64)
-    Q = np.array([x[1] for x in tt], dtype=np.int64)
-    R = np.array([x[2] for x in tt], dtype=np.int64)
-    S = np.array([x[3] for x in tt], dtype=np.int64)
-    C = np.array([x[4] for x in tt], dtype=complex)
-    T = len(P)
-    KP = P // 2
-    KQ = Q // 2
-    SP = P % 2
-    SQ = Q % 2
-    SR = R % 2
-    SS = S % 2
-    KR = R // 2
-    KS = S // 2
+    # CPU doubles coefficient precomputation — only needed when NOT using GPU.
+    # When gpu_apply is provided, doubles are computed on GPU from spatial
+    # integrals, so we skip this (avoids needing the huge t_s tensor:
+    # n_orb=85 -> t_s = 170^4*16B = 13.4 GB).
+    if gpu_apply is None:
+        tt = []
+        for p in range(n):
+            for q in range(p + 1, n):
+                for r in range(n):
+                    for s in range(r + 1, n):
+                        c2 = 2.0 * (t[p, q, r, s] - t[p, q, s, r])
+                        if abs(c2) <= eps:
+                            continue
+                        if (1 - p % 2) + (1 - q % 2) != \
+                           (1 - r % 2) + (1 - s % 2):
+                            continue
+                        tt.append((p, q, r, s, complex(c2)))
+        P = np.array([x[0] for x in tt], dtype=np.int64)
+        Q = np.array([x[1] for x in tt], dtype=np.int64)
+        R = np.array([x[2] for x in tt], dtype=np.int64)
+        S = np.array([x[3] for x in tt], dtype=np.int64)
+        C = np.array([x[4] for x in tt], dtype=complex)
+        T = len(P)
+        KP = P // 2
+        KQ = Q // 2
+        SP = P % 2
+        SQ = Q % 2
+        SR = R % 2
+        SS = S % 2
+        KR = R // 2
+        KS = S // 2
     one = np.int64(1)
     orb = np.arange(n_orb)
     n_v = n_orb - n_a
 
-    def apply(azs, bzs, vals):
+    def apply(azs, bzs, vals, doubles_only=False):
         azs = np.asarray(azs, dtype=np.int64)
         bzs = np.asarray(bzs, dtype=np.int64)
         vals = np.asarray(vals, dtype=complex)
@@ -1068,66 +1176,80 @@ def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0):
         sgnB = _spin_sign(azs[:, None, None], bzs[:, None, None], Ob, True) * \
                _spin_sign(azs[:, None, None], bz2, Vb, True)
         # ---- doubles: chunked fancy-index mask ----
-        # full-grid (S, T) masks would need S*T*3 bytes; chunk so the
-        # per-block peak stays ~50 MB even for large T (H2O cc-pVDZ has
-        # 126,236 terms; S=5000 -> 1.9 GB un-chunked — the memory blowup
-        # reported when running it).  Adaptive chunk: target
-        # chunk*T <= 5e7.
-        CH = chunk if chunk > 0 else max(1, min(S, 50_000_000 // max(T, 1)))
-        d_az_l = []; d_bz_l = []; d_v_l = []
-        for c0 in range(0, S, CH):
-            c1 = min(c0 + CH, S)
-            r_occ = np.where(SR[None, :] == 0, occA[c0:c1][:, KR],
-                             occB[c0:c1][:, KR])
-            s_occ = np.where(SS[None, :] == 0, occA[c0:c1][:, KS],
-                             occB[c0:c1][:, KS])
-            ok = r_occ & s_occ
-            si_c, ti = np.nonzero(ok)
-            if len(si_c) == 0:
-                continue
-            si = si_c + c0
-            az_c = azs[si]; bz_c = bzs[si]
-            KS_c = KS[ti]; SS_c = SS[ti]; KR_c = KR[ti]; SR_c = SR[ti]
-            KQ_c = KQ[ti]; SQ_c = SQ[ti]; KP_c = KP[ti]; SP_c = SP[ti]
-            C_c = C[ti]
-            rm_sa = np.where(SS_c == 0, one << KS_c, np.int64(0))
-            rm_sb = np.where(SS_c == 1, one << KS_c, np.int64(0))
-            sgn = _spin_sign(az_c, bz_c, KS_c, SS_c.astype(bool))
-            az1 = az_c ^ rm_sa; bz1 = bz_c ^ rm_sb
-            rm_ra = np.where(SR_c == 0, one << KR_c, np.int64(0))
-            rm_rb = np.where(SR_c == 1, one << KR_c, np.int64(0))
-            sgn = sgn * _spin_sign(az1, bz1, KR_c, SR_c.astype(bool))
-            az1 = az1 ^ rm_ra; bz1 = bz1 ^ rm_rb
-            q_empty = np.where(SQ_c == 0, ((az1 >> KQ_c) & 1) == 0,
-                               ((bz1 >> KQ_c) & 1) == 0)
-            g = np.nonzero(q_empty)[0]
-            if len(g) == 0:
-                continue
-            rm_qa = np.where(SQ_c[g] == 0, one << KQ_c[g], np.int64(0))
-            rm_qb = np.where(SQ_c[g] == 1, one << KQ_c[g], np.int64(0))
-            aq = az1[g] ^ rm_qa; bq = bz1[g] ^ rm_qb
-            sgn = sgn[g] * _spin_sign(aq, bq, KQ_c[g], SQ_c[g].astype(bool))
-            p_empty = np.where(SP_c[g] == 0, ((aq >> KP_c[g]) & 1) == 0,
-                               ((bq >> KP_c[g]) & 1) == 0)
-            h = np.nonzero(p_empty)[0]
-            if len(h) == 0:
-                continue
-            rm_pa = np.where(SP_c[g[h]] == 0, one << KP_c[g[h]], np.int64(0))
-            rm_pb = np.where(SP_c[g[h]] == 1, one << KP_c[g[h]], np.int64(0))
-            ap = aq[h] ^ rm_pa; bp = bq[h] ^ rm_pb
-            sgn = sgn[h] * _spin_sign(ap, bp, KP_c[g[h]], SP_c[g[h]].astype(bool))
-            d_az_l.append(ap)
-            d_bz_l.append(bp)
-            d_v_l.append(C_c[g[h]] * sgn * vals[si[g[h]]])
-        if d_az_l:
-            d_az = np.concatenate(d_az_l)
-            d_bz = np.concatenate(d_bz_l)
-            d_v = np.concatenate(d_v_l)
+        # ---- doubles: GPU or CPU ----
+        if gpu_apply is not None:
+            d_az, d_bz, d_v, d_src = gpu_apply.doubles(azs, bzs, vals)
+            d_az = np.asarray(d_az, dtype=np.int64)
+            d_bz = np.asarray(d_bz, dtype=np.int64)
+            d_v = np.asarray(d_v, dtype=complex)
+            d_src = np.asarray(d_src, dtype=np.int64)
         else:
-            d_az = np.zeros(0, dtype=np.int64)
-            d_bz = np.zeros(0, dtype=np.int64)
-            d_v = np.zeros(0, dtype=complex)
+            # full-grid (S, T) masks would need S*T*3 bytes; chunk so the
+            # per-block peak stays ~50 MB even for large T (H2O cc-pVDZ has
+            # 126,236 terms; S=5000 -> 1.9 GB un-chunked — the memory blowup
+            # reported when running it).  Adaptive chunk: target
+            # chunk*T <= 5e7.
+            CH = chunk if chunk > 0 else max(1, min(S, 50_000_000 // max(T, 1)))
+            d_az_l = []; d_bz_l = []; d_v_l = []; d_src_l = []
+            for c0 in range(0, S, CH):
+                c1 = min(c0 + CH, S)
+                r_occ = np.where(SR[None, :] == 0, occA[c0:c1][:, KR],
+                                 occB[c0:c1][:, KR])
+                s_occ = np.where(SS[None, :] == 0, occA[c0:c1][:, KS],
+                                 occB[c0:c1][:, KS])
+                ok = r_occ & s_occ
+                si_c, ti = np.nonzero(ok)
+                if len(si_c) == 0:
+                    continue
+                si = si_c + c0
+                az_c = azs[si]; bz_c = bzs[si]
+                KS_c = KS[ti]; SS_c = SS[ti]; KR_c = KR[ti]; SR_c = SR[ti]
+                KQ_c = KQ[ti]; SQ_c = SQ[ti]; KP_c = KP[ti]; SP_c = SP[ti]
+                C_c = C[ti]
+                rm_sa = np.where(SS_c == 0, one << KS_c, np.int64(0))
+                rm_sb = np.where(SS_c == 1, one << KS_c, np.int64(0))
+                sgn = _spin_sign(az_c, bz_c, KS_c, SS_c.astype(bool))
+                az1 = az_c ^ rm_sa; bz1 = bz_c ^ rm_sb
+                rm_ra = np.where(SR_c == 0, one << KR_c, np.int64(0))
+                rm_rb = np.where(SR_c == 1, one << KR_c, np.int64(0))
+                sgn = sgn * _spin_sign(az1, bz1, KR_c, SR_c.astype(bool))
+                az1 = az1 ^ rm_ra; bz1 = bz1 ^ rm_rb
+                q_empty = np.where(SQ_c == 0, ((az1 >> KQ_c) & 1) == 0,
+                                   ((bz1 >> KQ_c) & 1) == 0)
+                g = np.nonzero(q_empty)[0]
+                if len(g) == 0:
+                    continue
+                rm_qa = np.where(SQ_c[g] == 0, one << KQ_c[g], np.int64(0))
+                rm_qb = np.where(SQ_c[g] == 1, one << KQ_c[g], np.int64(0))
+                aq = az1[g] ^ rm_qa; bq = bz1[g] ^ rm_qb
+                sgn = sgn[g] * _spin_sign(aq, bq, KQ_c[g], SQ_c[g].astype(bool))
+                p_empty = np.where(SP_c[g] == 0, ((aq >> KP_c[g]) & 1) == 0,
+                                   ((bq >> KP_c[g]) & 1) == 0)
+                h = np.nonzero(p_empty)[0]
+                if len(h) == 0:
+                    continue
+                rm_pa = np.where(SP_c[g[h]] == 0, one << KP_c[g[h]], np.int64(0))
+                rm_pb = np.where(SP_c[g[h]] == 1, one << KP_c[g[h]], np.int64(0))
+                ap = aq[h] ^ rm_pa; bp = bq[h] ^ rm_pb
+                sgn = sgn[h] * _spin_sign(ap, bp, KP_c[g[h]], SP_c[g[h]].astype(bool))
+                d_az_l.append(ap)
+                d_bz_l.append(bp)
+                d_v_l.append(C_c[g[h]] * sgn * vals[si[g[h]]])
+                d_src_l.append(si[g[h]])
+            if d_az_l:
+                d_az = np.concatenate(d_az_l)
+                d_bz = np.concatenate(d_bz_l)
+                d_v = np.concatenate(d_v_l)
+                d_src = np.concatenate(d_src_l)
+            else:
+                d_az = np.zeros(0, dtype=np.int64)
+                d_bz = np.zeros(0, dtype=np.int64)
+                d_v = np.zeros(0, dtype=complex)
+                d_src = np.zeros(0, dtype=np.int64)
+        if doubles_only:
+            return (d_az, d_bz, d_v, d_src)
         # ---- concatenate singles + doubles ----
+        src_idx = np.arange(S, dtype=np.int64)
         az_l = [az2[maskA],
                 np.broadcast_to(azs[:, None, None], bz2.shape)[maskB],
                 d_az]
@@ -1137,7 +1259,10 @@ def sparse_action_sz_vec(n, N, sz, o, t, const, eps=0.0, chunk=0):
         v_l = [(coefA * sgnA * vals[:, None, None])[maskA],
                (coefB * sgnB * vals[:, None, None])[maskB],
                d_v]
+        src_l = [np.broadcast_to(src_idx[:, None, None], az2.shape)[maskA],
+                 np.broadcast_to(src_idx[:, None, None], bz2.shape)[maskB],
+                 d_src]
         return (np.concatenate(az_l), np.concatenate(bz_l),
-                np.concatenate(v_l))
+                np.concatenate(v_l), np.concatenate(src_l))
 
     return apply, n_a, n_b, n_orb, dim_a, dim_b
