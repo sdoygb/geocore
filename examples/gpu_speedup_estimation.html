@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>WCI GPU 加速估算 — NH₃/cc-pVDZ (dim=1.41×10¹⁰)</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 20px; background: #fafafa; }
+h1 { font-size: 18px; color: #333; margin-bottom: 4px; }
+.subtitle { font-size: 13px; color: #888; margin-bottom: 16px; }
+.chart { width: 100%; height: 420px; background: #fff; border-radius: 8px; padding: 10px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.summary { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.card { background: #fff; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); flex: 1; min-width: 180px; }
+.card .label { font-size: 12px; color: #888; margin-bottom: 4px; }
+.card .value { font-size: 24px; font-weight: 600; color: #333; }
+.card .unit { font-size: 13px; color: #aaa; font-weight: normal; }
+.card.highlight .value { color: #c0392b; }
+.note { font-size: 12px; color: #999; margin-top: 8px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>WCI GPU 加速路线估算 — NH₃/cc-pVDZ (dim=1.41×10¹⁰, 2波包)</h1>
+<div class="subtitle">基于实测数据分解：H 构造中 doubles 占 85%，singles+填充占 15%；残差占当前 GPU 总时间 41%</div>
+
+<div class="summary">
+  <div class="card">
+    <div class="label">CPU 总时间</div>
+    <div class="value">301.3<span class="unit"> s</span></div>
+  </div>
+  <div class="card">
+    <div class="label">当前 GPU (doubles only)</div>
+    <div class="value">132.9<span class="unit"> s</span></div>
+    <div class="note">加速 2.27×</div>
+  </div>
+  <div class="card highlight">
+    <div class="label">估算 GPU (doubles+singles+residual)</div>
+    <div class="value">58.8–76.1<span class="unit"> s</span></div>
+    <div class="note">加速 3.96–5.12×（中等 4.76×）</div>
+  </div>
+  <div class="card">
+    <div class="label">相比当前 GPU 再加速</div>
+    <div class="value">1.75–2.26<span class="unit"> ×</span></div>
+  </div>
+</div>
+
+<div id="chart1" class="chart"></div>
+<div id="chart2" class="chart"></div>
+
+<div class="note">
+<b>估算假设</b>：① GPU doubles 在 WCI 实际场景加速 3.7–9.9×（含数据传输/输出处理，非纯 kernel 22×）；② singles GPU 化加速 5–10×（计算量小，开销占比大）；③ 残差 GPU 化加速 2–4×（H@c 已有 GPUMatrix，apply H 到新中心可复用 doubles kernel，合并/去重仍需 CPU）。<br>
+<b>关键瓶颈转移</b>：GPU doubles 后，残差从 CPU 时的 18% 上升到 GPU 时的 41%，成为最大未加速部分。残差中 H@c 占 ~40%、apply H 到新中心占 ~35%、合并去重占 ~25%。
+</div>
+
+<script>
+// 时间分布数据（秒）
+const categories = ['CPU', '当前 GPU\n(doubles only)', '保守估算\n(singles 5×, residual 2×)', '中等估算\n(singles 10×, residual 3×)', '乐观估算\n(singles 10×, residual 4×)'];
+
+// H-doubles, H-singles+fill, residual, other
+const hDoubles = [209.0, 40.6, 40.6, 40.6, 40.6];
+const hSingles = [37.0, 37.0, 7.4, 3.7, 3.7];
+const residual = [54.5, 54.5, 27.2, 18.2, 13.6];
+const other = [0.8, 0.8, 0.8, 0.8, 0.8];
+
+const chart1 = echarts.init(document.getElementById('chart1'));
+chart1.setOption({
+  title: { text: '端到端时间分布（堆叠）', left: 'center', textStyle: { fontSize: 14 } },
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
+    formatter: function(params) {
+      let s = params[0].name + '<br/>';
+      let total = 0;
+      params.forEach(p => { s += p.marker + p.seriesName + ': ' + p.value.toFixed(1) + 's<br/>'; total += p.value; });
+      s += '<b>总计: ' + total.toFixed(1) + 's</b>';
+      return s;
+    }
+  },
+  legend: { bottom: 0 },
+  grid: { left: 60, right: 30, top: 50, bottom: 60 },
+  xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 11, interval: 0 } },
+  yAxis: { type: 'value', name: '时间 (s)', nameTextStyle: { fontSize: 11 } },
+  series: [
+    { name: 'H-doubles (GPU)', type: 'bar', stack: 'total', data: hDoubles, itemStyle: { color: '#2980b9' } },
+    { name: 'H-singles+填充', type: 'bar', stack: 'total', data: hSingles, itemStyle: { color: '#3498db' } },
+    { name: '残差计算', type: 'bar', stack: 'total', data: residual, itemStyle: { color: '#e67e22' } },
+    { name: '其他(对角化等)', type: 'bar', stack: 'total', data: other, itemStyle: { color: '#95a5a6' } }
+  ]
+});
+
+// 加速比数据
+const speedupData = [
+  { name: 'CPU 基线', value: 1.0, color: '#95a5a6' },
+  { name: '当前 GPU\n(doubles only)', value: 2.27, color: '#2980b9' },
+  { name: '保守估算', value: 3.96, color: '#f39c12' },
+  { name: '中等估算', value: 4.76, color: '#e67e22' },
+  { name: '乐观估算', value: 5.12, color: '#c0392b' }
+];
+
+const chart2 = echarts.init(document.getElementById('chart2'));
+chart2.setOption({
+  title: { text: '端到端加速比（vs CPU）', left: 'center', textStyle: { fontSize: 14 } },
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' },
+    formatter: function(params) {
+      const p = params[0];
+      return p.name + '<br/>加速比: <b>' + p.value.toFixed(2) + '×</b><br/>总时间: ' + (301.3/p.value).toFixed(1) + 's';
+    }
+  },
+  grid: { left: 60, right: 40, top: 50, bottom: 60 },
+  xAxis: { type: 'category', data: speedupData.map(d => d.name), axisLabel: { fontSize: 11, interval: 0 } },
+  yAxis: { type: 'value', name: '加速比 (×)', nameTextStyle: { fontSize: 11 }, max: 6 },
+  series: [{
+    type: 'bar',
+    data: speedupData.map(d => ({ value: d.value, itemStyle: { color: d.color } })),
+    barWidth: '50%',
+    label: { show: true, position: 'top', formatter: '{c}×', fontSize: 12, fontWeight: 'bold' }
+  }]
+});
+
+window.addEventListener('resize', () => { chart1.resize(); chart2.resize(); });
+</script>
+</body>
+</html>

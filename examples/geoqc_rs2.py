@@ -36,6 +36,10 @@ def build_system(name):
         mol = gto.M(atom='N 0 0 0; N 0 0 1.1', basis='6-31g', verbose=0)
         fc, nelec = 2, 10
         R = 1.1
+    elif name == 'n2_631g_14':
+        mol = gto.M(atom='N 0 0 0; N 0 0 1.4', basis='6-31g', verbose=0)
+        fc, nelec = 2, 10
+        R = 1.4
     elif name == 'n2_631g_30_no':
         mol = gto.M(atom='N 0 0 0; N 0 0 3.0', basis='6-31g', verbose=0)
         fc, nelec = 2, 10

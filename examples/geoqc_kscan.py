@@ -32,8 +32,12 @@ def build_rank_tables(n_orb, n_a, n_b, da, db):
         bz_of[i] = sum(1 << j for j in c)
     return rt_a, rt_b, az_of, bz_of
 
-def power_iter(apply, hd2, az_of, bz_of, rt_a, rt_b, db, dim, k, iters, seed_idx):
-    """top-k 幂迭代：v ← H·v（对角+离对角一次合并），top-k 截断。返回 (E, final_idx, final_vals)。"""
+def power_iter(apply, hd_fn, az_of, bz_of, rt_a, rt_b, db, dim, k, iters, seed_idx):
+    """top-k 幂迭代：v ← H·v（对角+离对角一次合并），top-k 截断。返回 (E, final_idx, final_vals)。
+
+    hd_fn: 按需对角函数 hd_fn(idxs) -> 对角值数组（大 dim 时用
+    sector_diagonal_at，避免 O(dim) 全数组；小 dim 时是 sector_diagonal_sz
+    的 hd 数组的索引包装）。最终 Rayleigh 商同样按需聚合（不建 w_full）。"""
     idx = np.array([seed_idx], dtype=np.int64)
     vals = np.ones(1, dtype=complex)
     for it in range(iters):
@@ -41,7 +45,7 @@ def power_iter(apply, hd2, az_of, bz_of, rt_a, rt_b, db, dim, k, iters, seed_idx
         ti = rt_a[t_az] * db + rt_b[t_bz]
         # 合并对角贡献：输入态自身作为目标（一次 unique）
         all_ti = np.concatenate([ti, idx])
-        all_v = np.concatenate([t_v, hd2[idx] * vals])
+        all_v = np.concatenate([t_v, hd_fn(idx) * vals])
         u, inv = np.unique(all_ti, return_inverse=True)
         w = np.zeros(len(u), dtype=complex)
         np.add.at(w, inv, all_v)
@@ -51,12 +55,19 @@ def power_iter(apply, hd2, az_of, bz_of, rt_a, rt_b, db, dim, k, iters, seed_idx
         else:
             idx = u; vals = w
         vals /= np.linalg.norm(vals)
-    # 最终 Rayleigh 商（对角 + 离对角）
+    # 最终 Rayleigh 商（对角 + 离对角，按需聚合——不建 dim 全数组）
     t_az, t_bz, t_v = apply(az_of[idx // db], bz_of[idx % db], vals)
     ti = rt_a[t_az] * db + rt_b[t_bz]
-    w_full = np.zeros(dim, dtype=complex)
-    np.add.at(w_full, ti, t_v)
-    E = (np.vdot(vals, w_full[idx]) + np.vdot(vals, hd2[idx] * vals)).real
+    # 聚合到 idx ∪ 目标 的稀疏集合
+    all_ti = np.concatenate([ti, idx])
+    u, inv = np.unique(all_ti, return_inverse=True)
+    w = np.zeros(len(u), dtype=complex)
+    np.add.at(w, inv, np.concatenate([t_v, np.zeros(len(idx), dtype=complex)]))
+    # w[u 中属于 idx 的项] += 对角
+    mask = np.isin(u, idx)
+    w[mask] += hd_fn(u[mask]) * vals[np.searchsorted(np.sort(idx), u[mask])]
+    w_idx = w[np.searchsorted(u, idx)]
+    E = (np.vdot(vals, w_idx) + np.vdot(vals, hd_fn(idx) * vals)).real
     return E, idx, vals
 
 def main():
@@ -101,12 +112,25 @@ def main():
     ref = None
     if '--ref-e0' in args:
         ref = float(args[args.index('--ref-e0') + 1])
-    # 对角：单电子对角（two_body=False——sparse_action_sz 的 apply 已
-    # 在 row==col 项里携带两体对角，完整对角会 double count；机器验证）
-    t0 = time.time()
-    hd, *_ = exterior.sector_diagonal_sz(ns, nelec, 0, o_s, t_s, nuc, 1e-4,
-                                         two_body=False)
-    print(f'  one-body diagonal build {time.time()-t0:.1f}s')
+    # 对角策略：小 dim 建全数组（sector_diagonal_sz），大 dim 按需
+    # （sector_diagonal_at，避免 O(dim) 内存）。two_body=False——
+    # sparse_action_sz 的 apply 已在 row==col 项里携带两体对角，
+    # 完整对角会 double count（机器验证）。
+    DIAG_FULL_LIMIT = 2_000_000
+    if dim <= DIAG_FULL_LIMIT:
+        t0 = time.time()
+        hd, *_ = exterior.sector_diagonal_sz(ns, nelec, 0, o_s, t_s, nuc, 1e-4,
+                                               two_body=False)
+        print(f'  one-body diagonal (full {dim} elems) {time.time()-t0:.1f}s')
+        _hd_arr = hd
+        def hd_fn(idxs):
+            return _hd_arr[np.asarray(idxs, dtype=np.int64)]
+    else:
+        print(f'  on-demand diagonal via sector_diagonal_at (dim={dim})')
+        def hd_fn(idxs):
+            return exterior.sector_diagonal_at(
+                ns, nelec, 0, o_s, t_s, nuc, 1e-4,
+                idxs=np.asarray(idxs, dtype=np.int64))
     if ref is not None:
         E0 = ref
         print(f'  ref E0 (external) = {E0:.10f}')
@@ -118,12 +142,20 @@ def main():
     else:
         E0 = None  # 大 dim 时由最大 k 的收敛值充当参考（相对收敛）
         print('  E0: 大 dim 无外部参考 → 报告相对收敛 E(k)')
-    # 对角种子
-    seed = int(np.argmin(hd))
+    # 种子：HF 态（占据最低 n_a 个 alpha / n_b 个 beta 单电子能级）。
+    # argmin(hd) 需要全对角数组，大 dim 不可行；HF 态对两种 dim 均适用。
+    e_a = np.array([o_s[2 * k, 2 * k].real for k in range(n_orb)])
+    e_b = np.array([o_s[2 * k + 1, 2 * k + 1].real for k in range(n_orb)])
+    hf_a = np.sort(np.argsort(e_a)[:n_a])
+    hf_b = np.sort(np.argsort(e_b)[:n_b])
+    hf_az = int(np.sum(1 << hf_a))
+    hf_bz = int(np.sum(1 << hf_b))
+    seed = int(rt_a[hf_az]) * db + int(rt_b[hf_bz])
+    print(f'  HF seed idx={seed} (a occ={hf_a.tolist()}, b occ={hf_b.tolist()})')
     results = {}
     for k in ks:
         t0 = time.time()
-        E, idx, vals = power_iter(apply, hd, az_of, bz_of, rt_a, rt_b, db, dim, k, iters, seed)
+        E, idx, vals = power_iter(apply, hd_fn, az_of, bz_of, rt_a, rt_b, db, dim, k, iters, seed)
         results[k] = E
         err = '' if E0 is None else f'  err={abs(E-E0):.2e}  {"CHEM" if abs(E-E0) < 1.6e-3 else ""}'
         print(f'  k={k:6d}: E={E:.10f}{err}  ({time.time()-t0:.1f}s)')
